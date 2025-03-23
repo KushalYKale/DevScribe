@@ -24,11 +24,11 @@ public class TextEditor extends Application {
     public void start(Stage primaryStage) {
         primaryStage.setTitle("DevScribe");
 
-        // Create Text Area
+
         textArea = new TextArea();
         BorderPane root = new BorderPane(textArea);
 
-        // Create Menu Bar
+
         MenuBar menuBar = new MenuBar();
         Menu fileMenu = new Menu("File");
         MenuItem openItem = new MenuItem("Open");
