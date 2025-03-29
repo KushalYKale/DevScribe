@@ -38,7 +38,7 @@
     -fx-background-color: #e81123 !important;
 }
 
-/* Left Navigation */
+/* Left Navigation Styles */
 .left-nav {
     -fx-background-color: #474A48;
     -fx-padding: 20px;
@@ -47,7 +47,20 @@
 }
 
 .nav-logo {
+    -fx-fit-height: 50px;
     -fx-preserve-ratio: true;
+}
+
+.nav-title {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 25px;
+}
+
+.version-label {
+    -fx-text-fill: #a0a0a0;
+    -fx-font-size: 12px;
+    -fx-padding: 2px 0 0 0;
 }
 
 /* Content Area */

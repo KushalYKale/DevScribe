@@ -1,5 +1,6 @@
 package com.DevScribe.ui.screen;
 
+import com.DevScribe.ui.dialogs.NewProjectHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
@@ -12,6 +13,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+
+import java.nio.file.Path;
 
 public class LauncherScreen {
     private double xOffset = 0;
@@ -85,15 +88,25 @@ public class LauncherScreen {
         leftNav.setPrefWidth(250);
         leftNav.getStyleClass().add("left-nav");
 
+        // Logo
         ImageView logo = new ImageView(new Image(getClass().getResourceAsStream("/images/logo.png")));
         logo.setFitHeight(50);
         logo.setPreserveRatio(true);
 
+        // Name and Version
         Label title = new Label("DevScribe");
-        title.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 25px;");
+        title.getStyleClass().add("nav-title");
+
+        Label versionLabel = new Label("Version 1.0.0");
+        versionLabel.getStyleClass().add("version-label");
+
+        VBox titleVersion = new VBox(2); // Small spacing between title and version
+        titleVersion.getChildren().addAll(title, versionLabel);
+        titleVersion.setAlignment(Pos.CENTER_LEFT);
 
         HBox logoTitle = new HBox(10);
-        logoTitle.getChildren().addAll(logo, title);
+        logoTitle.setAlignment(Pos.CENTER_LEFT);
+        logoTitle.getChildren().addAll(logo, titleVersion);
 
         leftNav.getChildren().add(logoTitle);
         return leftNav;
@@ -137,7 +150,9 @@ public class LauncherScreen {
 
         Button newProjectBtn = createToolbarButton("New Project");
         Button openBtn = createToolbarButton("Open");
-        Button cloneBtn = createToolbarButton("Clone");
+        Button cloneBtn = createToolbarButton("Clone Repository");
+
+        newProjectBtn.setOnAction(e -> handleNewProject(toolbar));
 
         toolbar.getChildren().addAll(
                 searchBox,
@@ -150,9 +165,39 @@ public class LauncherScreen {
         return toolbar;
     }
 
+    private void handleNewProject(HBox toolbar) {
+        // Get the current window/stage
+        Stage currentStage = (Stage) toolbar.getScene().getWindow();
+
+        NewProjectHandler.showNewProjectDialog(currentStage,
+                new NewProjectHandler.ProjectCreationCallback() {
+                    @Override
+                    public void onProjectCreated(Path projectPath) {
+                        // Success! Add the new project to your UI
+                        System.out.println("Project created at: " + projectPath);
+//                        addProjectToRecentList(projectPath);
+//                        refreshProjectList(); // If you have this method
+                    }
+
+                    @Override
+                    public void onError(String errorMessage) {
+                        showAlert("Project Creation Failed", errorMessage, Alert.AlertType.ERROR);
+                    }
+                }
+        );
+    }
+
     private Button createToolbarButton(String text) {
         Button btn = new Button(text);
         btn.getStyleClass().add("toolbar-button");
         return btn;
+    }
+
+    private void showAlert(String title, String message, Alert.AlertType alertType) {
+        Alert alert = new Alert(alertType);
+        alert.setTitle(title);
+        alert.setHeaderText(null); // No header
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }
