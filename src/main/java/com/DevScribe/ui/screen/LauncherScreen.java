@@ -1,79 +1,61 @@
 package com.DevScribe.ui.screen;
 
-import javafx.application.Application;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
 public class LauncherScreen {
-
     private double xOffset = 0;
     private double yOffset = 0;
 
     public void start(Stage stage) {
-
         BorderPane root = new BorderPane();
-//        root.setPadding(new Insets(15));
+        root.getStyleClass().add("root");
 
-        HBox header = launchHeader(stage);
-        root.setTop(header);
-
-        VBox leftNav = leftNav();
-        root.setLeft(leftNav);
-
-        ScrollPane contentArea = createContentArea();
-        root.setCenter(contentArea);
+        root.setTop(createHeader(stage));
+        root.setLeft(createLeftNav());
+        root.setCenter(createContentArea());
 
         Scene scene = new Scene(root, 850, 725);
+        scene.getStylesheets().add(getClass().getResource("/css/launcher.css").toExternalForm());
         stage.setScene(scene);
         stage.initStyle(StageStyle.UNDECORATED);
         stage.show();
     }
 
-    private HBox launchHeader(Stage stage) {
-        HBox titleBar = new HBox(); // Removed initial spacing
-        titleBar.setStyle("-fx-background-color: #2c3333; -fx-padding: 5px;");
-        titleBar.setAlignment(Pos.CENTER_LEFT);
+    private HBox createHeader(Stage stage) {
+        HBox titleBar = new HBox();
+        titleBar.getStyleClass().add("title-bar");
 
-        // 1. Logo
-        ImageView logoView = new ImageView(
-                new Image(getClass().getResourceAsStream("/images/logo.png"))
-        );
-        logoView.setFitHeight(25);
+        ImageView logoView = new ImageView(new Image(getClass().getResourceAsStream("/images/logo.png")));
+        logoView.setFitHeight(16);
         logoView.setPreserveRatio(true);
 
-        // 2. Title
         Label title = new Label("DevScribe Launcher");
-        title.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px;");
-        title.setPadding(new Insets(0, 0, 0, 3));
+        title.getStyleClass().add("header-title");
 
-        // 3. Group logo and title together first
         HBox logoTitleGroup = new HBox(3);
         logoTitleGroup.setAlignment(Pos.CENTER_LEFT);
         logoTitleGroup.getChildren().addAll(logoView, title);
 
-        // 3. Spacer and buttons
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        // Window control buttons
-        Button minimizeButton = createTitleBarButton("\uE921", stage, () -> stage.setIconified(true));
-        Button maximizeButton = createTitleBarButton("\uE923", stage, () -> stage.setMaximized(!stage.isMaximized()));
-        Button closeButton = createTitleBarButton("\uE8BB", stage, stage::close);
+        Button minimizeButton = createTitleBarButton("\uE921", () -> stage.setIconified(true));
+        Button maximizeButton = createTitleBarButton("\uE923", () -> stage.setMaximized(!stage.isMaximized()));
+        Button closeButton = createTitleBarButton("\uE8BB", stage::close);
+        closeButton.getStyleClass().add("close-button");
 
-        titleBar.getChildren().addAll(logoView, title, spacer, minimizeButton, maximizeButton, closeButton);
+        titleBar.getChildren().addAll(logoTitleGroup, spacer, minimizeButton, maximizeButton, closeButton);
 
         // Draggable window
         titleBar.setOnMousePressed(event -> {
@@ -89,67 +71,88 @@ public class LauncherScreen {
         return titleBar;
     }
 
-    // Helper method for consistent buttons
-    private Button createTitleBarButton(String symbol, Stage stage, Runnable action) {
+    private Button createTitleBarButton(String symbol, Runnable action) {
         Button btn = new Button(symbol);
-        btn.setStyle("-fx-background-color: transparent; -fx-text-fill: white;");
+        btn.getStyleClass().add("title-bar-button");
         btn.setFont(Font.font("Segoe MDL2 Assets", FontWeight.BOLD, 13));
         btn.setOnAction(e -> action.run());
-
-        // Hover effects
-        btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: #3d4a4a; -fx-text-fill: white;"));
-        btn.setOnMouseExited(e -> btn.setStyle("-fx-background-color: transparent; -fx-text-fill: white;"));
-
-        // Special red hover for close button
-        if (symbol.equals("\uE8BB")) {
-            btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: #e81123; -fx-text-fill: white;"));
-        }
-
         return btn;
     }
 
-    private VBox leftNav() {
+    private VBox createLeftNav() {
         VBox leftNav = new VBox(20);
         leftNav.setPadding(new Insets(20));
         leftNav.setPrefWidth(250);
+        leftNav.getStyleClass().add("left-nav");
 
-        // Logo
-        ImageView leftNavLogo = new ImageView(
-                new Image(getClass().getResourceAsStream("/images/logo.png"))
-        );
-        leftNavLogo.setFitHeight(50);
-        leftNavLogo.setPreserveRatio(true);
+        ImageView logo = new ImageView(new Image(getClass().getResourceAsStream("/images/logo.png")));
+        logo.setFitHeight(50);
+        logo.setPreserveRatio(true);
 
-        // Title
-        Label leftNavTitle = new Label("DevScribe");
-        leftNavTitle.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 25px;");
+        Label title = new Label("DevScribe");
+        title.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 25px;");
 
-        HBox leftNavLogoTitle = new HBox(10);
-        leftNavLogoTitle.getChildren().addAll(leftNavLogo, leftNavTitle);
+        HBox logoTitle = new HBox(10);
+        logoTitle.getChildren().addAll(logo, title);
 
-        leftNav.getChildren().addAll(leftNavLogoTitle);
-
-        leftNav.setStyle("-fx-background-color:#474A48;");
-
+        leftNav.getChildren().add(logoTitle);
         return leftNav;
     }
 
-    //main area color : #909590
-    private ScrollPane createContentArea(){
-        ScrollPane contentArea = new ScrollPane();
-        contentArea.setFitToWidth(true);
-        VBox content = new VBox(20);
-        content.setPadding(new Insets(20));
+    private BorderPane createContentArea() {
+        BorderPane contentArea = new BorderPane();
+        contentArea.getStyleClass().add("content-area");
 
-        // 3. Welcome message
-        Label welcome = new Label("Welcome to DevScribe");
-        welcome.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+        contentArea.setTop(createToolbar());
 
+        ScrollPane scrollContent = new ScrollPane();
+        scrollContent.setFitToWidth(true);
+        scrollContent.getStyleClass().add("scroll-content");
+        scrollContent.setContent(createMainContent());
 
-        content.getChildren().addAll(welcome);
-        contentArea.setContent(content);
+        contentArea.setCenter(scrollContent);
         return contentArea;
     }
 
+    private VBox createMainContent() {
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(15));
+        content.getStyleClass().add("main-content");
+        return content;
+    }
 
+    private HBox createToolbar() {
+        HBox toolbar = new HBox(15);
+        toolbar.setPadding(new Insets(8, 15, 8, 15));
+        toolbar.getStyleClass().add("toolbar");
+
+        TextField searchField = new TextField();
+        searchField.setPromptText("Search projects...");
+        searchField.getStyleClass().add("search-field");
+
+        HBox searchBox = new HBox(8);
+        searchBox.getStyleClass().add("search-box");
+        searchBox.getChildren().add(searchField);
+        HBox.setHgrow(searchBox, Priority.ALWAYS);
+
+        Button newProjectBtn = createToolbarButton("New Project");
+        Button openBtn = createToolbarButton("Open");
+        Button cloneBtn = createToolbarButton("Clone");
+
+        toolbar.getChildren().addAll(
+                searchBox,
+                new Separator(Orientation.VERTICAL),
+                newProjectBtn,
+                openBtn,
+                cloneBtn
+        );
+
+        return toolbar;
+    }
+
+    private Button createToolbarButton(String text) {
+        Button btn = new Button(text);
+        btn.getStyleClass().add("toolbar-button");
+        return btn;
+    }
 }
