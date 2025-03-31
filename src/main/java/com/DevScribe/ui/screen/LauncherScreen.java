@@ -1,5 +1,6 @@
 package com.DevScribe.ui.screen;
 
+import com.DevScribe.ui.dialogs.NewProjectHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
@@ -12,6 +13,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import java.nio.file.Path;
+
 
 public class LauncherScreen {
     private double xOffset = 0;
@@ -85,15 +88,25 @@ public class LauncherScreen {
         leftNav.setPrefWidth(250);
         leftNav.getStyleClass().add("left-nav");
 
+        // Logo
         ImageView logo = new ImageView(new Image(getClass().getResourceAsStream("/images/logo.png")));
         logo.setFitHeight(50);
         logo.setPreserveRatio(true);
 
+        // Name and Version
         Label title = new Label("DevScribe");
-        title.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 25px;");
+        title.getStyleClass().add("nav-title");
+
+        Label versionLabel = new Label("Version 1.0.0");
+        versionLabel.getStyleClass().add("version-label");
+
+        VBox titleVersion = new VBox(2); // Small spacing between title and version
+        titleVersion.getChildren().addAll(title, versionLabel);
+        titleVersion.setAlignment(Pos.CENTER_LEFT);
 
         HBox logoTitle = new HBox(10);
-        logoTitle.getChildren().addAll(logo, title);
+        logoTitle.setAlignment(Pos.CENTER_LEFT);
+        logoTitle.getChildren().addAll(logo, titleVersion);
 
         leftNav.getChildren().add(logoTitle);
         return leftNav;
@@ -101,13 +114,13 @@ public class LauncherScreen {
 
     private BorderPane createContentArea() {
         BorderPane contentArea = new BorderPane();
-        contentArea.getStyleClass().add("content-area");
+        contentArea.setStyle("-fx-background-color: #2E2E38;");
 
         contentArea.setTop(createToolbar());
 
         ScrollPane scrollContent = new ScrollPane();
         scrollContent.setFitToWidth(true);
-        scrollContent.getStyleClass().add("scroll-content");
+        scrollContent.setStyle("-fx-background: #2E2E38;-fx-background-color: #2E2E38;");
         scrollContent.setContent(createMainContent());
 
         contentArea.setCenter(scrollContent);
@@ -126,18 +139,26 @@ public class LauncherScreen {
         toolbar.setPadding(new Insets(8, 15, 8, 15));
         toolbar.getStyleClass().add("toolbar");
 
+        ImageView searchIcon = new ImageView(new Image(getClass().getResourceAsStream("/images/search.png")));
+        searchIcon.setFitHeight(16);  // Set appropriate size
+        searchIcon.setPreserveRatio(true);
+
+
         TextField searchField = new TextField();
         searchField.setPromptText("Search projects...");
         searchField.getStyleClass().add("search-field");
 
+
         HBox searchBox = new HBox(8);
         searchBox.getStyleClass().add("search-box");
-        searchBox.getChildren().add(searchField);
-        HBox.setHgrow(searchBox, Priority.ALWAYS);
+        searchBox.getChildren().addAll(searchIcon, searchField);
+        HBox.setHgrow(searchField, Priority.ALWAYS);
 
         Button newProjectBtn = createToolbarButton("New Project");
         Button openBtn = createToolbarButton("Open");
-        Button cloneBtn = createToolbarButton("Clone");
+        Button cloneBtn = createToolbarButton("Clone Repository");
+
+        newProjectBtn.setOnAction(e -> handleNewProject(toolbar));
 
         toolbar.getChildren().addAll(
                 searchBox,
@@ -150,9 +171,48 @@ public class LauncherScreen {
         return toolbar;
     }
 
+    private void handleNewProject(HBox toolbar) {
+        // Get the current window/stage (LauncherScreen)
+        Stage currentStage = (Stage) toolbar.getScene().getWindow();
+
+        NewProjectHandler.showNewProjectDialog(currentStage,
+                new NewProjectHandler.ProjectCreationCallback() {
+                    @Override
+                    public void onProjectCreated(Path projectPath) {
+                        System.out.println("Project created at: " + projectPath);
+                        currentStage.close(); // Close the LauncherScreen
+                        // Create a new stage for the EditorScreen
+                        Stage editorStage = new Stage();
+//                        switchToEditorScreen(editorStage, projectPath); // Open the EditorScreen
+                    }
+                    @Override
+                    public void onError(String errorMessage) {
+                        showAlert("Project Creation Failed", errorMessage, Alert.AlertType.ERROR);
+                    }
+                }
+        );
+    }
+
+//    private void switchToEditorScreen(Stage editorStage, Path projectPath) {
+//        // Create the EditorScreen and pass the project path
+//        EditorScreen editorScreen = new EditorScreen();
+//        editorScreen.start(editorStage, projectPath); // Pass project path
+//
+//        editorStage.show();
+//    }
+
+
     private Button createToolbarButton(String text) {
         Button btn = new Button(text);
         btn.getStyleClass().add("toolbar-button");
         return btn;
+    }
+
+    private void showAlert(String title, String message, Alert.AlertType alertType) {
+        Alert alert = new Alert(alertType);
+        alert.setTitle(title);
+        alert.setHeaderText(null); // No header
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }

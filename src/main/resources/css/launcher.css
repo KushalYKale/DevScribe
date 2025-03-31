@@ -1,11 +1,6 @@
-/* Root and Main Layout */
-.root {
-    -fx-background-color: #909590;
-}
-
 /* Header Styles */
 .title-bar {
-    -fx-background-color: #2c3333;
+    -fx-background-color: #23232B;
     /*-fx-padding: 3px 5px; !* Reduced padding *!*/
     -fx-alignment: center-left;
     -fx-pref-height: 35px; /* Explicit height */
@@ -38,27 +33,32 @@
     -fx-background-color: #e81123 !important;
 }
 
-/* Left Navigation */
+/* Left Navigation Styles */
 .left-nav {
-    -fx-background-color: #474A48;
+    -fx-background-color: #23232B;   /* #474A48 */
     -fx-padding: 20px;
     -fx-pref-width: 250px;
     -fx-spacing: 20px;
 }
 
 .nav-logo {
+    -fx-fit-height: 50px;
     -fx-preserve-ratio: true;
 }
 
-/* Content Area */
-.content-area {
-    -fx-background-color: #909590;
+.nav-title {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 25px;
 }
 
-.scroll-content {
-    -fx-fit-to-width: true;
-    -fx-background-color: transparent;
+.version-label {
+    -fx-text-fill: #a0a0a0;
+    -fx-font-size: 12px;
+    -fx-padding: 2px 0 0 0;
 }
+
+
 
 .main-content {
     -fx-padding: 15px;
@@ -67,13 +67,14 @@
 
 /* Toolbar */
 .toolbar {
-    -fx-background-color: #f8f8f8;
+    -fx-background-color: #2E2E38;
     -fx-border-color: #e0e0e0;
     -fx-border-width: 0 0 1 0;
 }
 
 .search-box {
-    -fx-background-color: #f5f5f5;
+    -fx-background-color: #2E2E38;
+    /*-fx-background-color: #f5f5f5;*/
     -fx-background-radius: 4px;
     -fx-padding: 3px 8px;
     -fx-min-width: 150px;
@@ -83,20 +84,22 @@
 
 .search-field {
     -fx-background-color: transparent;
+    -fx-text-fill: #e0e0e0;
     -fx-border-width: 0;
     -fx-padding: 5px 10px;
-    -fx-font-size: 13px;
+    -fx-font-size: 15px;
 }
 
 .toolbar-button {
-    -fx-background-color: transparent;
-    -fx-text-fill: #333;
+    -fx-background-color: #2E2E38;
+    -fx-text-fill: #e0e0e0;
     -fx-padding: 5px 10px;
     -fx-content-display: left;
+    -fx-font-size: 13px;
 }
 
 .toolbar-button:hover {
-    -fx-background-color: #e0e0e0;
+    /*-fx-background-color: #e0e0e0;*/
 }
 
 .separator:vertical {

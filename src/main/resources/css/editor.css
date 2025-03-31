@@ -1,0 +1,57 @@
+/* Header Styles */
+.title-bar {
+    -fx-background-color: #23232B;
+    -fx-padding: 0 5px; /* Overall padding */
+    -fx-spacing: 10px;
+    -fx-alignment: center-left;
+    -fx-pref-height: 40px; /* Explicit height */
+}
+
+.header-logo {
+    -fx-preserve-ratio: true;
+}
+
+.header-title {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+.title-bar-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-family: "Segoe MDL2 Assets";
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-padding: 0 10px;
+}
+
+.title-bar-button:hover {
+    -fx-background-color: #3d4a4a;
+}
+
+.close-button:hover {
+    -fx-background-color: #e81123 !important;
+}
+
+
+.run-button {
+    -fx-font-family: "Segoe UI Emoji";
+    -fx-font-size: 12px;
+    -fx-background-color: #4CAF50; /* Green background */
+    -fx-text-fill: white;
+    -fx-padding: 5px 10px;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
+    -fx-margin: 0 5px 0 0;
+}
+
+/* Hover effect */
+.run-button:hover {
+    -fx-background-color: #45a049; /* Darker green */
+}
+
+/* Pressed effect */
+.run-button:pressed {
+    -fx-background-color: #3e8e41;
+}
