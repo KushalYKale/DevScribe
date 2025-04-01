@@ -55,3 +55,221 @@
 .run-button:pressed {
     -fx-background-color: #3e8e41;
 }
+
+/* Menu Bar Styles */
+.menu-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 0 10px 0 20px;
+    -fx-spacing: 15px;
+}
+
+.menu-button {
+    -fx-background-color: #23232B;
+    -fx-padding: 8px 5px;
+    -fx-cursor: hand;
+}
+
+.menu-button > .label {
+    -fx-text-fill: white !important;
+    -fx-font-size: 12px;
+    -fx-font-weight: normal;
+}
+
+.menu-button:hover > .label,
+.menu-button:showing > .label {
+    -fx-text-fill: white !important;
+}
+
+.menu-button:hover,
+.menu-button:showing {
+    -fx-background-color: #3a3a3a;
+}
+
+/* Context Menu (Dropdown) Styles */
+.context-menu {
+    -fx-background-color: #2d2d36;
+    -fx-border-color: #3a3a3a;
+    -fx-border-width: 1px;
+    -fx-padding: 5px 0;
+}
+
+.menu-item {
+    -fx-background-color: transparent;
+    -fx-text-fill: white; /* Changed from #b0b0b0 to white */
+    -fx-padding: 5px 25px 5px 15px;
+}
+
+.menu-item .label {
+    -fx-font-size: 12px;
+    -fx-text-fill: white; /* Ensure label text is white */
+}
+
+.menu-item:hover, .menu-item:focused {
+    -fx-background-color: #3a3a3a;
+}
+
+.check-menu-item .check {
+    -fx-background-color: transparent;
+    -fx-border-color: white; /* Changed from #b0b0b0 to white */
+    -fx-border-radius: 2px;
+    -fx-border-width: 1px;
+}
+
+.check-menu-item:selected .check {
+    -fx-background-color: #4CAF50;
+    -fx-border-color: transparent;
+}
+
+.check-menu-item:selected .check > .mark {
+    -fx-background-color: white;
+}
+
+.separator-menu-item .separator {
+    -fx-border-color: #3a3a3a;
+    -fx-border-width: 1px 0 0 0;
+    -fx-padding: 3px 0;
+}
+
+/* Shortcut text styling */
+.menu-item .accelerator-text {
+    -fx-text-fill: white;
+    -fx-padding: 0 0 0 20px;
+    -fx-opacity: 0.8; /* Slightly muted but still white */
+}
+
+.menu-item:hover .accelerator-text,
+.menu-item:focused .accelerator-text {
+    -fx-opacity: 1; /* Full white on hover */
+}
+
+/* Left Navigation Container */
+.left-nav {
+    -fx-background-color: #23232B;
+    -fx-spacing: 0;
+}
+
+/* Project Toolbar */
+.project-toolbar {
+    -fx-background-color: #1e1e24; /* Slightly darker than main bg */
+    -fx-pref-width: 50px;
+    -fx-alignment: top-center;
+    -fx-spacing: 10px;
+    -fx-padding: 10px 0;
+    -fx-border-color: #3a3a3a;
+    -fx-border-width: 0 1px 0 0; /* Right border only */
+}
+
+/* Project Directory */
+.project-directory {
+    -fx-background-color: #23232B;
+    -fx-pref-width: 200px;
+    -fx-border-color: #3a3a3a;
+    -fx-border-width: 0 0 0 1px; /* Left border to meet toolbar's right border */
+}
+
+/* Folder Toggle Button */
+.folder-toggle-btn {
+    -fx-background-color: transparent;
+    -fx-padding: 5px;
+    -fx-border-radius: 3px;
+}
+
+.folder-toggle-btn:hover {
+    -fx-background-color: #3a3a3a;
+}
+
+.folder-toggle-btn .ikonli-font-icon {
+    -fx-icon-size: 20px;
+    -fx-icon-color: #b0b0b0;
+}
+
+.folder-toggle-btn:hover .ikonli-font-icon {
+    -fx-icon-color: white;
+}
+/* Code Container - Main editor background */
+.code-container {
+    -fx-background-color: #1e1e1e;
+    -fx-padding: 0;
+}
+
+/* Tab Pane - Container for editor tabs */
+.code-tab-pane {
+    -fx-tab-min-width: 120px;
+    -fx-tab-max-width: 120px;
+    -fx-background-color: #252526;
+    -fx-border-color: #1e1e1e;
+    -fx-border-width: 0 0 1px 0;
+}
+
+/* Tab Header Area */
+.code-tab-pane .tab-header-area {
+    -fx-background-color: #252526;
+    -fx-padding: 0;
+}
+
+.code-tab-pane .tab-header-background {
+    -fx-background-color: transparent;
+}
+
+/* Individual Tabs */
+.code-tab {
+    -fx-background-color: #2d2d2d;
+    -fx-border-color: #1e1e1e;
+    -fx-border-width: 0 1px 0 0;
+    -fx-padding: 8px 20px; /* Adjusted padding for better width */
+    -fx-font-size: 12px;
+    -fx-text-fill: #b0b0b0;
+    -fx-min-width: 100px; /* Increased tab width */
+}
+
+.code-tab:selected {
+    -fx-background-color: #1e1e1e;
+    -fx-text-fill: white;
+}
+
+.code-tab .tab-label {
+    -fx-text-fill: inherit;
+}
+
+/* Code Area - The actual editor */
+.code-area {
+    -fx-font-family: "Consolas", "JetBrains Mono", monospace;
+    -fx-font-size: 14px;
+    -fx-background-color: #1e1e1e;
+    -fx-text-fill: white;
+    -fx-padding: 10px; /* Added padding */
+}
+
+/* Line Numbers */
+.code-area .lineno {
+    -fx-background-color: #252526;
+    -fx-text-fill: #858585;
+    -fx-padding: 0 10px 0 5px;
+    -fx-border-color: #1e1e1e;
+    -fx-border-width: 0 1px 0 0;
+}
+
+/* Scroll Bars */
+.code-area .scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.code-area .scroll-bar:vertical,
+.code-area .scroll-bar:horizontal {
+    -fx-background-color: #252526;
+}
+
+.code-area .scroll-bar .thumb {
+    -fx-background-color: #3e3e3e;
+    -fx-background-radius: 5px;
+}
+
+/* Status Bar */
+.status-bar {
+    -fx-background-color: #007acc;
+    -fx-padding: 5px 15px;
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-border-color: #0062a3;
+    -fx-border-width: 1px 0 0 0;
+}
