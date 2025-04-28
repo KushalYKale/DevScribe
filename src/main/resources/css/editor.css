@@ -38,7 +38,7 @@
 .run-button {
     -fx-font-family: "Segoe UI Emoji";
     -fx-font-size: 12px;
-    -fx-background-color: #4CAF50; /* Green background */
+    -fx-background-color: #4CAF50;
     -fx-text-fill: white;
     -fx-padding: 5px 10px;
     -fx-background-radius: 4px;
@@ -95,7 +95,7 @@
 
 .menu-item {
     -fx-background-color: transparent;
-    -fx-text-fill: white; /* Changed from #b0b0b0 to white */
+    -fx-text-fill: white;
     -fx-padding: 5px 25px 5px 15px;
 }
 
