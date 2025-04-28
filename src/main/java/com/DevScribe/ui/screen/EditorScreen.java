@@ -7,7 +7,6 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
@@ -17,31 +16,61 @@ import org.fxmisc.richtext.LineNumberFactory;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class EditorScreen {
     private double xOffset = 0;
     private double yOffset = 0;
     private BorderPane root;
-    private EditorHandler editorHandler = new EditorHandler();
     private TabPane editorTabPane;
     private ScrollPane scrollPane;
     private CodeArea codeArea;
+    private EditorHandler editorHandler;
 
+    // Add Path to load specific project files
+    private Path projectPath;
 
-    public void start(Stage stage) {
-        root = new BorderPane();  // Initialize the class field
+    public void start(Stage stage, Path projectPath) {
+        this.projectPath = projectPath;
+        root = new BorderPane();
+
+        System.out.println("Opening editor for project: " + projectPath);
+
+        setupEditorArea();
+        editorHandler = new EditorHandler(this);
 
         root.setTop(createHeader(stage));
         root.setLeft(leftNav());
-        setupEditorArea();
         setupStatusBar();
+
+        // Load the project files into the editor
+        loadProjectFiles();
 
         Scene scene = new Scene(root, 1400, 750);
         scene.getStylesheets().add(getClass().getResource("/css/editor.css").toExternalForm());
         stage.setScene(scene);
         stage.initStyle(StageStyle.UNDECORATED);
         stage.show();
+    }
+
+    // Method to load project files
+    private void loadProjectFiles() {
+        Path defaultFilePath = projectPath.resolve("src").resolve("Main.java");
+
+        if (Files.exists(defaultFilePath)) {
+            try {
+                String content = new String(Files.readAllBytes(defaultFilePath));
+                codeArea.replaceText(content); // Load file content into the code area
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            codeArea.replaceText("// No files found. Start coding...");
+        }
     }
 
     private HBox createHeader(Stage stage) {
@@ -59,7 +88,6 @@ public class EditorScreen {
         logoTitleGroup.setAlignment(Pos.CENTER_LEFT);
         logoTitleGroup.getChildren().addAll(logoView, title);
 
-        // Create menu bar
         HBox menuBar = new HBox(10);
         menuBar.setAlignment(Pos.CENTER_LEFT);
 
@@ -88,16 +116,12 @@ public class EditorScreen {
         MenuItem zoomOut = new MenuItem("Zoom Out");
         viewMenu.getItems().addAll(wordWrap, new SeparatorMenuItem(), zoomIn, zoomOut);
 
-        // Add menus to menu bar
         menuBar.getChildren().addAll(fileMenu, editMenu, viewMenu);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button runButton = createTitleBarButton("\u25B6", () -> {
-            // Add functionality to run the code
-            System.out.println("Run button clicked");
-        });
+        Button runButton = createTitleBarButton("\u25B6", () -> System.out.println("Run button clicked"));
         runButton.getStyleClass().add("run-button");
 
         Button minimizeButton = createTitleBarButton("\uE921", () -> stage.setIconified(true));
@@ -121,32 +145,21 @@ public class EditorScreen {
             stage.setY(event.getScreenY() - yOffset);
         });
 
-        // Add action handlers for menu items
+        // File actions
         newFile.setOnAction(e -> editorHandler.handleNewFile(stage));
-        openFile.setOnAction(e -> editorHandler.handleOpenFile());
-        saveFile.setOnAction(e -> editorHandler.handleSaveFile());
-        saveAsFile.setOnAction(e -> editorHandler.handleSaveAsFile());
+        openFile.setOnAction(e -> editorHandler.handleOpenFile(stage));
+        saveFile.setOnAction(e -> editorHandler.handleSaveFile(stage));
+        saveAsFile.setOnAction(e -> editorHandler.handleSaveAsFile(stage));
         exit.setOnAction(e -> {
             Stage newStage = new Stage();
             LauncherScreen launcherScreen = new LauncherScreen();
             try {
                 launcherScreen.start(newStage);
-                stage.close();  // Close the current stage
+                stage.close();
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
         });
-
-
-        cut.setOnAction(e -> editorHandler.handleCut());
-        redo.setOnAction(e -> editorHandler.handleRedo());
-        copy.setOnAction(e -> editorHandler.handleCopy());
-        undo.setOnAction(e -> editorHandler.handleUndo());
-        paste.setOnAction(e -> editorHandler.handlePaste());
-
-        zoomIn.setOnAction(e -> editorHandler.handleZoomIn());
-        zoomOut.setOnAction(e -> editorHandler.handleZoomOut());
-        wordWrap.setOnAction(e -> editorHandler.handleWordWrap(wordWrap.isSelected()));
 
         return titleBar;
     }
@@ -159,7 +172,6 @@ public class EditorScreen {
         return btn;
     }
 
-
     private VBox leftNav() {
         VBox leftNav = new VBox();
         leftNav.getStyleClass().add("left-nav");
@@ -167,7 +179,6 @@ public class EditorScreen {
         VBox projectToolbar = createProjectToolbar();
         VBox projectDirectory = createProjectDirectory();
 
-        // Toggle functionality
         Button toggleBtn = (Button) projectToolbar.getChildren().get(0);
         AtomicBoolean isVisible = new AtomicBoolean(true);
 
@@ -182,7 +193,6 @@ public class EditorScreen {
                     : MaterialDesignF.FOLDER_OPEN);
         });
 
-        // Use StackPane to maintain layout when hidden
         StackPane directoryContainer = new StackPane(projectDirectory);
         HBox container = new HBox(projectToolbar, directoryContainer);
 
@@ -194,15 +204,11 @@ public class EditorScreen {
         VBox toolbar = new VBox();
         toolbar.getStyleClass().add("project-toolbar");
 
-        // Folder toggle button
         FontIcon folderIcon = new FontIcon("mdi2f-folder");
         Button toggleBtn = new Button("", folderIcon);
         toggleBtn.getStyleClass().add("folder-toggle-btn");
 
-        // Add other toolbar buttons if needed
-        // Button refreshBtn = new Button("", new FontIcon("mdi2f-refresh"));
-
-        toolbar.getChildren().addAll(toggleBtn /*, refreshBtn */);
+        toolbar.getChildren().addAll(toggleBtn);
         return toolbar;
     }
 
@@ -218,40 +224,46 @@ public class EditorScreen {
         return directory;
     }
 
-
     private void setupEditorArea() {
         editorTabPane = new TabPane();
         editorTabPane.getStyleClass().add("code-tab-pane");
         editorTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.ALL_TABS);
 
-        // Create reusable CodeArea
         codeArea = new CodeArea();
         codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
         codeArea.getStyleClass().add("code-area");
 
-        // Wrap CodeArea in ScrollPane
         scrollPane = new ScrollPane(codeArea);
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(true);
 
-        // Bind CodeArea size to ScrollPane for dynamic resizing
         codeArea.prefWidthProperty().bind(scrollPane.widthProperty());
         codeArea.prefHeightProperty().bind(scrollPane.heightProperty());
 
-        // Create initial tab
         Tab initialTab = new Tab("Untitled");
         initialTab.getStyleClass().add("code-tab");
         initialTab.setContent(scrollPane);
         editorTabPane.getTabs().add(initialTab);
 
-        // Set the editor to center of root layout
         root.setCenter(editorTabPane);
     }
-
 
     private void setupStatusBar() {
         Label statusBar = new Label("Ready");
         statusBar.getStyleClass().add("status-bar");
         root.setBottom(statusBar);
+    }
+
+    public TabPane getEditorTabPane() {
+        return editorTabPane;
+    }
+
+    public void handleBackToHome(Stage stage) {
+        LauncherScreen launcherScreen = new LauncherScreen();
+        try {
+            launcherScreen.start(stage);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

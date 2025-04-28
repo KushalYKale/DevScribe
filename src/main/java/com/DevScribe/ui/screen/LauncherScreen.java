@@ -1,9 +1,9 @@
 package com.DevScribe.ui.screen;
 
 import com.DevScribe.ui.dialogs.NewProjectHandler;
-import javafx.geometry.Insets;
-import javafx.geometry.Orientation;
-import javafx.geometry.Pos;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.geometry.*;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
@@ -13,26 +13,70 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
-import java.nio.file.Path;
 
+import java.io.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.ArrayList;
 
 public class LauncherScreen {
     private double xOffset = 0;
     private double yOffset = 0;
+    private boolean isDarkMode = true; // Default to dark mode
+    private BorderPane root;
+    private ToggleButton themeToggle;
+    private ListView<String> projectListView;
+    private ObservableList<String> projectList;
+    private Stage stage;  // Declare stage as an instance variable
 
-    public void start(Stage stage) {
-        BorderPane root = new BorderPane();
+    public void start(Stage primaryStage) {
+        this.stage = primaryStage;
+
+        // Load the project list from the file
+        projectList = FXCollections.observableArrayList(loadProjectList());
+
+        root = new BorderPane();
         root.getStyleClass().add("root");
 
         root.setTop(createHeader(stage));
         root.setLeft(createLeftNav());
         root.setCenter(createContentArea());
 
+        // Initialize the scene and pass the theme to it
         Scene scene = new Scene(root, 850, 725);
         scene.getStylesheets().add(getClass().getResource("/css/launcher.css").toExternalForm());
-        stage.setScene(scene);
-        stage.initStyle(StageStyle.UNDECORATED);
-        stage.show();
+        updateTheme(scene);
+
+        // Theme toggle button
+        themeToggle = new ToggleButton("Switch to Light");
+        themeToggle.setOnAction(e -> toggleTheme());
+        themeToggle.getStyleClass().add("toolbar-button"); // Reuse existing style
+        themeToggle.setMaxWidth(Double.MAX_VALUE);
+
+        HBox bottomBar = new HBox();
+        bottomBar.setAlignment(Pos.CENTER_RIGHT);
+        bottomBar.setPadding(new Insets(5, 15, 5, 15));
+        bottomBar.getChildren().add(themeToggle);
+
+        root.setBottom(bottomBar);
+
+        primaryStage.setScene(scene);
+        primaryStage.initStyle(StageStyle.UNDECORATED);
+        primaryStage.show();
+    }
+
+    private void toggleTheme() {
+        isDarkMode = !isDarkMode;
+        themeToggle.setText(isDarkMode ? "Switch to Light" : "Switch to Dark");
+
+        Scene scene = root.getScene();
+        updateTheme(scene);
+    }
+
+    private void updateTheme(Scene scene) {
+        scene.getRoot().getStyleClass().removeAll("dark-theme", "light-theme");
+        scene.getRoot().getStyleClass().add(isDarkMode ? "dark-theme" : "light-theme");
     }
 
     private HBox createHeader(Stage stage) {
@@ -88,19 +132,17 @@ public class LauncherScreen {
         leftNav.setPrefWidth(250);
         leftNav.getStyleClass().add("left-nav");
 
-        // Logo
         ImageView logo = new ImageView(new Image(getClass().getResourceAsStream("/images/logo.png")));
         logo.setFitHeight(50);
         logo.setPreserveRatio(true);
 
-        // Name and Version
         Label title = new Label("DevScribe");
         title.getStyleClass().add("nav-title");
 
         Label versionLabel = new Label("Version 1.0.0");
         versionLabel.getStyleClass().add("version-label");
 
-        VBox titleVersion = new VBox(2); // Small spacing between title and version
+        VBox titleVersion = new VBox(2);
         titleVersion.getChildren().addAll(title, versionLabel);
         titleVersion.setAlignment(Pos.CENTER_LEFT);
 
@@ -118,10 +160,31 @@ public class LauncherScreen {
 
         contentArea.setTop(createToolbar());
 
+        // Initialize project list
+        projectListView = new ListView<>(projectList);
+        projectListView.getStyleClass().add("project-list");
+
+        projectListView.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {  // Double-click to open project
+                String selectedProject = projectListView.getSelectionModel().getSelectedItem();
+                if (selectedProject != null) {
+                    Path projectPath = Paths.get("path/to/projects", selectedProject);  // Adjust path accordingly
+                    EditorScreen editorScreen = new EditorScreen();
+                    editorScreen.start(stage, projectPath);  // Open in editor
+                }
+            }
+        });
+
+        VBox mainContent = createMainContent();
+
+        // Add project list directly into the main content
+        mainContent.getChildren().add(projectListView);
+
+        // Add main content to scroll pane
         ScrollPane scrollContent = new ScrollPane();
         scrollContent.setFitToWidth(true);
-        scrollContent.setStyle("-fx-background: #2E2E38;-fx-background-color: #2E2E38;");
-        scrollContent.setContent(createMainContent());
+        scrollContent.getStyleClass().add("scroll-content");
+        scrollContent.setContent(mainContent);
 
         contentArea.setCenter(scrollContent);
         return contentArea;
@@ -140,14 +203,12 @@ public class LauncherScreen {
         toolbar.getStyleClass().add("toolbar");
 
         ImageView searchIcon = new ImageView(new Image(getClass().getResourceAsStream("/images/search.png")));
-        searchIcon.setFitHeight(16);  // Set appropriate size
+        searchIcon.setFitHeight(16);
         searchIcon.setPreserveRatio(true);
-
 
         TextField searchField = new TextField();
         searchField.setPromptText("Search projects...");
         searchField.getStyleClass().add("search-field");
-
 
         HBox searchBox = new HBox(8);
         searchBox.getStyleClass().add("search-box");
@@ -158,7 +219,24 @@ public class LauncherScreen {
         Button openBtn = createToolbarButton("Open");
         Button cloneBtn = createToolbarButton("Clone Repository");
 
-        newProjectBtn.setOnAction(e -> handleNewProject(toolbar));
+        newProjectBtn.setOnAction(e -> {
+            NewProjectHandler.showNewProjectDialog(stage, new NewProjectHandler.ProjectCreationCallback() {
+                @Override
+                public void onProjectCreated(Path projectPath) {
+                    // Add the new project to the list
+                    addProjectToList(projectPath.getFileName().toString(), projectPath.toString());
+
+                    // Open the project in the editor
+                    EditorScreen editorScreen = new EditorScreen();
+                    editorScreen.start(stage, projectPath);  // Pass Stage and Path
+                }
+
+                @Override
+                public void onError(String errorMessage) {
+                    showError(errorMessage);
+                }
+            });
+        });
 
         toolbar.getChildren().addAll(
                 searchBox,
@@ -167,52 +245,54 @@ public class LauncherScreen {
                 openBtn,
                 cloneBtn
         );
-
         return toolbar;
     }
 
-    private void handleNewProject(HBox toolbar) {
-        // Get the current window/stage (LauncherScreen)
-        Stage currentStage = (Stage) toolbar.getScene().getWindow();
+    private void addProjectToList(String projectName, String projectPath) {
+        // Add the new project to the ObservableList which updates the ListView automatically
+        projectList.add(projectName);
 
-        NewProjectHandler.showNewProjectDialog(currentStage,
-                new NewProjectHandler.ProjectCreationCallback() {
-                    @Override
-                    public void onProjectCreated(Path projectPath) {
-                        System.out.println("Project created at: " + projectPath);
-                        currentStage.close(); // Close the LauncherScreen
-                        // Create a new stage for the EditorScreen
-                        Stage editorStage = new Stage();
-//                        switchToEditorScreen(editorStage, projectPath); // Open the EditorScreen
-                    }
-                    @Override
-                    public void onError(String errorMessage) {
-                        showAlert("Project Creation Failed", errorMessage, Alert.AlertType.ERROR);
-                    }
-                }
-        );
+        // Save the updated project list to the file
+        saveProjectList(projectList);
     }
-
-//    private void switchToEditorScreen(Stage editorStage, Path projectPath) {
-//        // Create the EditorScreen and pass the project path
-//        EditorScreen editorScreen = new EditorScreen();
-//        editorScreen.start(editorStage, projectPath); // Pass project path
-//
-//        editorStage.show();
-//    }
-
 
     private Button createToolbarButton(String text) {
-        Button btn = new Button(text);
-        btn.getStyleClass().add("toolbar-button");
-        return btn;
+        Button button = new Button(text);
+        button.getStyleClass().add("toolbar-button");
+        return button;
     }
 
-    private void showAlert(String title, String message, Alert.AlertType alertType) {
-        Alert alert = new Alert(alertType);
-        alert.setTitle(title);
-        alert.setHeaderText(null); // No header
-        alert.setContentText(message);
+    private void showError(String errorMessage) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Error");
+        alert.setHeaderText(null);
+        alert.setContentText(errorMessage);
         alert.showAndWait();
+    }
+
+    // Save project list to a file
+    private void saveProjectList(List<String> projects) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("projects.txt"))) {
+            for (String project : projects) {
+                writer.write(project);
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            showError("Error saving project list: " + e.getMessage());
+        }
+    }
+
+    // Load project list from a file
+    private List<String> loadProjectList() {
+        List<String> projects = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader("projects.txt"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                projects.add(line);
+            }
+        } catch (IOException e) {
+            showError("Error loading project list: " + e.getMessage());
+        }
+        return projects;
     }
 }

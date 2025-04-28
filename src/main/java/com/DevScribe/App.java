@@ -9,8 +9,7 @@ public class App extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
-//        new LauncherScreen().start(stage);
-        new EditorScreen().start(stage);
+        new LauncherScreen().start(stage);
     }
 
 
