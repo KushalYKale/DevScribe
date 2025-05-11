@@ -66,10 +66,6 @@
     -fx-spacing: 10px;
 }
 
-.light-theme .project-list{
-    -fx-background-color: #2E2E38;
-    -fx-text-fill: white;
-}
 
 .dark-theme .scroll-content,
 .dark-theme .viewport {
@@ -112,6 +108,16 @@
     -fx-padding: 0 5px;
 }
 
+/* Dark theme list view */
+.dark-theme .project-list {
+    -fx-background-color: #2E2E38;
+    -fx-text-fill: white;
+}
+
+.dark-theme .project-list .list-cell {
+    -fx-background-color: #3a3a3a;
+    -fx-text-fill: white;
+}
 
 /* Light Theme */
 .light-theme {
@@ -225,4 +231,15 @@
 
 .light-theme .separator:vertical {
     -fx-padding: 0 5px;
+}
+
+/* Light theme list view */
+.light-theme .project-list {
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #23232B;
+}
+
+.light-theme .project-list .list-cell {
+    -fx-background-color: #F5F5F5;
+    -fx-text-fill: #23232B;
 }
