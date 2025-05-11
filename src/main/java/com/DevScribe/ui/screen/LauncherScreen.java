@@ -216,7 +216,6 @@ public class LauncherScreen {
 
     private void refreshListView() {
         if (projectListView != null) {
-            // Refresh the ListView cells to apply the updated theme
             projectListView.refresh();
         }
     }

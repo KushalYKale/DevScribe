@@ -1,6 +1,7 @@
 package com.DevScribe.ui.screen;
 
 import com.DevScribe.ui.components.EditorHandler;
+import com.DevScribe.ui.dialogs.Terminal;
 import com.DevScribe.utils.PathValidator;
 import com.DevScribe.utils.ScreenManager;
 import javafx.geometry.Pos;
@@ -33,6 +34,7 @@ public class EditorScreen {
     private CodeArea codeArea;
     private EditorHandler editorHandler;
     public TreeView<Path> projectTree;
+    private Terminal terminal;
 
     private Path projectPath;
 
@@ -52,7 +54,7 @@ public class EditorScreen {
             return;
         }
 
-        projectTree = new TreeView<>(createTreeItem(projectPath));  // Initialize projectTree here
+        projectTree = new TreeView<>(createTreeItem(projectPath));
         projectTree.setShowRoot(true);
         projectTree.setCellFactory(param -> new TreeCell<Path>() {
             @Override
@@ -68,12 +70,14 @@ public class EditorScreen {
         });
 
         editorHandler = new EditorHandler(this, projectPath, projectTree);
+        terminal = new Terminal();
 
         setupEditorArea();
         root.setTop(createHeader(stage));
-        setupStatusBar();
         root.setLeft(leftNav());
         loadProjectFiles();
+        HBox statusBar = createStatusBarWithTerminal();
+        root.setBottom(statusBar);
 
         Scene scene = new Scene(root, 1400, 750);
         scene.getStylesheets().add(getClass().getResource("/css/editor.css").toExternalForm());
@@ -160,16 +164,48 @@ public class EditorScreen {
 
         MenuButton viewMenu = new MenuButton("View");
         CheckMenuItem wordWrap = new CheckMenuItem("Word Wrap");
+        CheckMenuItem toggleTerminal = new CheckMenuItem("Show Terminal");
         MenuItem zoomIn = new MenuItem("Zoom In");
         MenuItem zoomOut = new MenuItem("Zoom Out");
-        viewMenu.getItems().addAll(wordWrap, new SeparatorMenuItem(), zoomIn, zoomOut);
+        viewMenu.getItems().addAll(toggleTerminal,wordWrap, new SeparatorMenuItem(), zoomIn, zoomOut);
 
+        toggleTerminal.setOnAction(event -> {
+            if (terminal.isVisible()) {
+                // Hide the terminal
+                terminal.setVisible(false);
+                terminal.setManaged(false); // Remove from layout
+            } else {
+                // Show the terminal
+                terminal.setVisible(true);
+                terminal.setManaged(true); // Allow terminal to take up space in the layout
+            }
+        });
         menuBar.getChildren().addAll(fileMenu, editMenu, viewMenu);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button runButton = createTitleBarButton("\u25B6", () -> System.out.println("Run button clicked"));
+        Button runButton = createTitleBarButton("\u25B6", () -> {
+            if (editorTabPane.getSelectionModel().getSelectedItem() != null) {
+                Tab selectedTab = editorTabPane.getSelectionModel().getSelectedItem();
+                ScrollPane tabContent = (ScrollPane) selectedTab.getContent();
+                CodeArea area = (CodeArea) tabContent.getContent();
+                String fileName = selectedTab.getText();
+                Path filePath = findFileInProject(fileName);
+
+                if (filePath != null) {
+                    terminal.showTerminal(filePath, area.getText());
+                    terminal.setVisible(true);
+                    terminal.setManaged(true);  // Show the terminal when the run button is clicked
+                } else {
+                    // If the file path is null, show an error or message
+                    System.out.println("File path not found.");
+                }
+            } else {
+                // Optionally, handle case where no tab is selected
+                System.out.println("No file selected.");
+            }
+        });
         runButton.getStyleClass().add("run-button");
 
         Button minimizeButton = createTitleBarButton("\uE921", () -> stage.setIconified(true));
@@ -209,6 +245,18 @@ public class EditorScreen {
         return btn;
     }
 
+    private Path findFileInProject(String fileName) {
+        try {
+            return Files.walk(projectPath)
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().equals(fileName))
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     private VBox leftNav() {
         VBox leftNav = new VBox();
         leftNav.getStyleClass().add("left-nav");
@@ -241,8 +289,7 @@ public class EditorScreen {
         VBox toolbar = new VBox();
         toolbar.getStyleClass().add("project-toolbar");
 
-        FontIcon folderIcon = new FontIcon("mdi2f-folder");
-        Button toggleBtn = new Button("", folderIcon);
+        Button toggleBtn = new Button("Folder");
         toggleBtn.getStyleClass().add("folder-toggle-btn");
 
         toolbar.getChildren().addAll(toggleBtn);
@@ -352,14 +399,16 @@ public class EditorScreen {
     }
 
 
-    private void setupStatusBar() {
+    private HBox createStatusBarWithTerminal() {
         HBox statusBar = new HBox();
         statusBar.getStyleClass().add("status-bar");
 
         Label statusLabel = new Label("Ready");
         statusBar.getChildren().add(statusLabel);
 
-        root.setBottom(statusBar);
+        terminal.setVisible(false);
+
+        return statusBar;
     }
 
     private void setupEditorArea() {
@@ -371,12 +420,37 @@ public class EditorScreen {
         codeArea = new CodeArea();
         codeArea.setEditable(true);
         codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
-        codeArea.setStyle("-fx-background-color: black; -fx-text-fill: white;");
+        codeArea.setStyle("-fx-background-color: grey; -fx-text-fill: white;");
 
         scrollPane = new ScrollPane(codeArea);
         scrollPane.setFitToWidth(true);
+        scrollPane.setFitToHeight(true);
 
-        root.setCenter(editorTabPane);
+
+        root.setCenter(createEditorAndTerminalArea());
+    }
+
+    private VBox createEditorAndTerminalArea() {
+        VBox editorTerminalContainer = new VBox();
+
+        // Make the editorTabPane grow to fill available space
+        VBox.setVgrow(editorTabPane, Priority.ALWAYS);
+
+        // When the terminal is visible, it should occupy space at the bottom
+        VBox.setVgrow(terminal, Priority.SOMETIMES);
+
+        // Set the minimum height for the editorTabPane
+        editorTabPane.setMinHeight(550);
+
+        // Initially hide the terminal and remove it from the layout
+        terminal.setVisible(false);
+        terminal.setManaged(false); // This ensures terminal does not take up space when hidden
+        terminal.setMinHeight(200);
+
+        // Add the editor area and terminal to the container
+        editorTerminalContainer.getChildren().addAll(editorTabPane, terminal);
+
+        return editorTerminalContainer;
     }
 
 
