@@ -1,5 +1,10 @@
 package com.DevScribe.ui.screen;
 
+import com.DevScribe.editor.highlighting.CHighlighter;
+import com.DevScribe.editor.highlighting.JavaHighlighter;
+import com.DevScribe.editor.highlighting.LanguageHighlighter;
+import com.DevScribe.editor.highlighting.PythonHighlighter;
+import com.DevScribe.model.Language;
 import com.DevScribe.ui.components.EditorHandler;
 import com.DevScribe.ui.dialogs.Terminal;
 import com.DevScribe.utils.PathValidator;
@@ -23,6 +28,8 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
+import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class EditorScreen {
@@ -76,8 +83,7 @@ public class EditorScreen {
         root.setTop(createHeader(stage));
         root.setLeft(leftNav());
         loadProjectFiles();
-        HBox statusBar = createStatusBarWithTerminal();
-        root.setBottom(statusBar);
+        root.setBottom(createStatusBar());
 
         Scene scene = new Scene(root, 1400, 750);
         scene.getStylesheets().add(getClass().getResource("/css/editor.css").toExternalForm());
@@ -100,14 +106,13 @@ public class EditorScreen {
     private void loadProjectFiles() {
         Path defaultFilePath;
 
-        // If running from JAR, use the default path for the project
         if (isRunningFromJar()) {
-            defaultFilePath = Paths.get(System.getProperty("user.home"), "DevScribe", "projects", "src", "Main.java");
+            defaultFilePath = Paths.get(System.getProperty("user.home"), "DevScribe", "projects", "src", "main.java");
         } else {
-            defaultFilePath = projectPath.resolve("src").resolve("Main.java");
+            defaultFilePath = projectPath.resolve("src").resolve("main.java");
         }
 
-        // If a default file exists, load it into the editor
+
         if (Files.exists(defaultFilePath)) {
             try {
                 String content = Files.readString(defaultFilePath);
@@ -173,11 +178,11 @@ public class EditorScreen {
             if (terminal.isVisible()) {
                 // Hide the terminal
                 terminal.setVisible(false);
-                terminal.setManaged(false); // Remove from layout
+                terminal.setManaged(false);
             } else {
                 // Show the terminal
                 terminal.setVisible(true);
-                terminal.setManaged(true); // Allow terminal to take up space in the layout
+                terminal.setManaged(true);
             }
         });
         menuBar.getChildren().addAll(fileMenu, editMenu, viewMenu);
@@ -196,13 +201,11 @@ public class EditorScreen {
                 if (filePath != null) {
                     terminal.showTerminal(filePath, area.getText());
                     terminal.setVisible(true);
-                    terminal.setManaged(true);  // Show the terminal when the run button is clicked
+                    terminal.setManaged(true);
                 } else {
-                    // If the file path is null, show an error or message
                     System.out.println("File path not found.");
                 }
             } else {
-                // Optionally, handle case where no tab is selected
                 System.out.println("No file selected.");
             }
         });
@@ -298,10 +301,9 @@ public class EditorScreen {
 
     private VBox createProjectDirectory() {
         VBox directory = new VBox();
-        directory.getStyleClass().add("project-directory");
 
         Label directoryLabel = new Label("Project");
-        directoryLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: white;");
+        directoryLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white; -fx-pref-width: 250px; -fx-background-color: #23232B");
 
         if (projectPath == null || !Files.exists(projectPath) || !Files.isDirectory(projectPath)) {
             Label error = new Label("Invalid or empty project path.");
@@ -338,6 +340,8 @@ public class EditorScreen {
             }
         });
 
+        projectTree.getStyleClass().add("tree-view");
+
         directory.getChildren().addAll(directoryLabel, projectTree);
         return directory;
     }
@@ -365,7 +369,6 @@ public class EditorScreen {
             return;
         }
 
-        // Avoid opening duplicate tabs
         for (Tab tab : editorTabPane.getTabs()) {
             if (tab.getText().equals(filePath.getFileName().toString())) {
                 editorTabPane.getSelectionModel().select(tab);
@@ -376,11 +379,14 @@ public class EditorScreen {
         String fileName = filePath.getFileName().toString();
         Tab fileTab = new Tab(fileName);
         fileTab.setClosable(true);
+        fileTab.getStyleClass().add("tab");
+//        fileTab.setStyle("-fx-background-color: #23232B; -fx-text-fill: white; -fx-font-size: 14px;");
 
         CodeArea editorArea = new CodeArea();
         editorArea.setWrapText(true);
         editorArea.setParagraphGraphicFactory(LineNumberFactory.get(editorArea));
-        editorArea.getStyleClass().add("editor-area");
+        editorArea.getStyleClass().add("code-area");
+        bindHighlighting(editorArea);
 
         try {
             String content = Files.readString(filePath);
@@ -399,14 +405,12 @@ public class EditorScreen {
     }
 
 
-    private HBox createStatusBarWithTerminal() {
+    private HBox createStatusBar() {
         HBox statusBar = new HBox();
         statusBar.getStyleClass().add("status-bar");
 
         Label statusLabel = new Label("Ready");
         statusBar.getChildren().add(statusLabel);
-
-        terminal.setVisible(false);
 
         return statusBar;
     }
@@ -415,12 +419,14 @@ public class EditorScreen {
         editorTabPane = new TabPane();
         editorTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.ALL_TABS);
         editorTabPane.setTabMinWidth(100);
-        editorTabPane.setStyle(String.format("-fx-background-color: %s;", Color.BLACK));
+        editorTabPane.setStyle("-fx-background-color: #1e1e24");
 
         codeArea = new CodeArea();
         codeArea.setEditable(true);
         codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
-        codeArea.setStyle("-fx-background-color: grey; -fx-text-fill: white;");
+        codeArea.getStyleClass().add("code-area");
+
+        bindHighlighting(codeArea);
 
         scrollPane = new ScrollPane(codeArea);
         scrollPane.setFitToWidth(true);
@@ -430,24 +436,35 @@ public class EditorScreen {
         root.setCenter(createEditorAndTerminalArea());
     }
 
+    private Language currentLanguage = Language.JAVA;
+    private final Map<Language, LanguageHighlighter> highlighterMap = Map.of(
+            Language.JAVA, (LanguageHighlighter) new JavaHighlighter(),
+            Language.PYTHON, (LanguageHighlighter) new PythonHighlighter(),
+            Language.C, (LanguageHighlighter) new CHighlighter()
+    );
+
+    private void bindHighlighting(CodeArea codeArea) {
+        codeArea.multiPlainChanges()
+                .successionEnds(Duration.ofMillis(300))
+                .subscribe(ignore -> {
+                    LanguageHighlighter highlighter = highlighterMap.get(currentLanguage);
+                    codeArea.setStyleSpans(0, highlighter.computeHighlighting(codeArea.getText()));
+                });
+    }
+
     private VBox createEditorAndTerminalArea() {
         VBox editorTerminalContainer = new VBox();
 
-        // Make the editorTabPane grow to fill available space
-        VBox.setVgrow(editorTabPane, Priority.ALWAYS);
+        VBox.setVgrow(editorTabPane, Priority.SOMETIMES);
 
-        // When the terminal is visible, it should occupy space at the bottom
         VBox.setVgrow(terminal, Priority.SOMETIMES);
 
-        // Set the minimum height for the editorTabPane
         editorTabPane.setMinHeight(550);
 
-        // Initially hide the terminal and remove it from the layout
         terminal.setVisible(false);
-        terminal.setManaged(false); // This ensures terminal does not take up space when hidden
-        terminal.setMinHeight(200);
+        terminal.setManaged(false);
+        terminal.setPrefHeight(300);
 
-        // Add the editor area and terminal to the container
         editorTerminalContainer.getChildren().addAll(editorTabPane, terminal);
 
         return editorTerminalContainer;

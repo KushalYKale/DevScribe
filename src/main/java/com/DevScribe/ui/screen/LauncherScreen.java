@@ -199,6 +199,7 @@ public class LauncherScreen {
                     ScreenManager.switchToEditor((Stage) listView.getScene().getWindow(), item.getPath());
                 }
             });
+            cell.setStyle("-fx-background-color: #23232B; ");
 
             return cell;
         });

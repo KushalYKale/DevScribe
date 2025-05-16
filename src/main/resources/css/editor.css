@@ -150,23 +150,31 @@
 
 /* Project Toolbar */
 .project-toolbar {
-    -fx-background-color: #1e1e24; /* Slightly darker than com.DevScribe.main bg */
+    -fx-background-color: #23232B; /* Slightly darker than com.DevScribe.main bg */
     -fx-pref-width: 50px;
+    -fx-pref-height: 800px;
     -fx-alignment: top-center;
     -fx-spacing: 10px;
     -fx-padding: 10px 0;
-    -fx-border-color: #3a3a3a;
-    -fx-border-width: 0 1px 0 0; /* Right border only */
+    -fx-border-color: rgba(149, 146, 146, 0.58);
+    -fx-border-width: 0 0.25px 0 0; /* Right border only */
 }
+
 
 /* Project Directory */
-.project-directory {
+.tree-view{
     -fx-background-color: #23232B;
-    -fx-pref-width: 200px;
-
-    -fx-border-color: #3a3a3a;
-    -fx-border-width: 0 0 0 1px; /* Left border to meet toolbar's right border */
+    -fx-pref-height: 800px;
+    -fx-border-color: rgba(149, 146, 146, 0.58);
+    -fx-border-width: 0 0.25px 0 0;
 }
+
+.tree-view .tree-cell{
+    -fx-background-color: #23232B;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+}
+
 
 /* Folder Toggle Button */
 .folder-toggle-btn {
@@ -235,10 +243,13 @@
 /* Code Area - The actual editor */
 .code-area {
     -fx-font-family: "Consolas", "JetBrains Mono", monospace;
-    -fx-font-size: 14px;
+    -fx-font-size: 16px;
     -fx-background-color: #1e1e1e;
-    -fx-text-fill: white;
-    -fx-padding: 10px; /* Added padding */
+    -fx-padding: 10px;
+}
+
+.code-area .caret {
+    -fx-stroke: #00ffcc; /* bright cyan cursor */
 }
 
 /* Line Numbers */
@@ -265,6 +276,53 @@
     -fx-background-radius: 5px;
 }
 
+/* Syntax Highlighting */
+.code-area .keyword {
+    -fx-fill: #c586c0 !important;
+    -fx-font-weight: bold;
+}
+
+.code-area .string {
+    -fx-fill: #ce9178 !important;
+}
+
+.code-area .comment {
+    -fx-fill: #6a9955 !important;
+    -fx-font-style: italic;
+}
+
+.code-area .function {
+    -fx-fill: #dcdcaa !important;
+}
+
+.code-area .type {
+    -fx-fill: #4ec9b0 !important;
+}
+
+.code-area .number {
+    -fx-fill: #b5cea8 !important;
+}
+
+.code-area .operator {
+    -fx-fill: #d4d4d4 !important;
+}
+
+.code-area .annotation {
+    -fx-text-fill: #c586c0 !important;
+}
+
+.code-area .paren,
+.code-area .brace,
+.code-area .bracket,
+.code-area .semicolon {
+    -fx-fill: #D4D4D4 !important;
+}
+
+.code-area .text {
+    -fx-fill: #d4d4d4;
+}
+
+
 /* Status Bar */
 .status-bar {
     -fx-background-color: #007acc;
@@ -275,10 +333,17 @@
     -fx-border-width: 1px 0 0 0;
 }
 
-.editor-area {
-    -fx-background-color: #252526;
+/* File Tab */
+.tab-header-background{
+    -fx-background-color: #1e1e1e;
+    -fx-border-width: 0 0 0.25 0px;
+    -fx-border-color: rgba(149, 146, 146, 0.58);
 }
 
-.editor-area .text{
-    -fx-fill: white ;
+.tab {
+    -fx-background-color: transparent ;
+    -fx-text-fill: white !important;
+    -fx-font-size: 16px;
 }
+
+

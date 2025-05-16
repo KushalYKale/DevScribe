@@ -1,26 +1,32 @@
 package com.DevScribe.utils;
 
-import javafx.scene.control.TextArea;
-
-import java.io.InputStream;
+import javafx.application.Platform;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.BufferedReader;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 
 public class ProcessStreamer {
-    public static void streamOutput(InputStream inputStream, TextArea terminal) {
-        Thread outputThread = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    // Append each line to the terminal's TextArea
-                    terminal.appendText(line + "\n");
+
+    // Stream output by reading small buffers of bytes, converting to String and passing immediately
+    public static void streamOutput(InputStream inputStream, Consumer<String> outputConsumer) {
+        new Thread(() -> {
+            try {
+                byte[] buffer = new byte[1024];
+                int read;
+                while ((read = inputStream.read(buffer)) != -1) {
+                    String chunk = new String(buffer, 0, read, StandardCharsets.UTF_8);
+                    // Ensure UI updates happen on the JavaFX Application thread
+                    Platform.runLater(() -> outputConsumer.accept(chunk));
                 }
             } catch (IOException e) {
-                terminal.appendText("Error reading process output: " + e.getMessage() + "\n");
+                Platform.runLater(() -> outputConsumer.accept("[ERROR] Error reading stream: " + e.getMessage() + "\n"));
             }
-        });
-        outputThread.setDaemon(true);  // Allow thread to be terminated when the app closes
-        outputThread.start();
+        }).start();
+    }
+
+    // Just reuse the same for error stream
+    public static void streamError(InputStream errorStream, Consumer<String> errorConsumer) {
+        streamOutput(errorStream, errorConsumer);
     }
 }
