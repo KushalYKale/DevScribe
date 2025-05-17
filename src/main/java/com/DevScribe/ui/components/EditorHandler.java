@@ -1,11 +1,8 @@
 package com.DevScribe.ui.components;
 
 import com.DevScribe.ui.screen.EditorScreen;
-import javafx.scene.control.Alert;
+import javafx.scene.control.*;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TreeItem;
-import javafx.scene.control.TreeView;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import org.fxmisc.richtext.CodeArea;
@@ -14,177 +11,152 @@ import org.fxmisc.richtext.LineNumberFactory;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class EditorHandler {
 
     private final EditorScreen editorScreen;
     private final Map<Tab, File> tabFileMap = new HashMap<>();
-    private Path projectDirectory; // Project directory, now dynamic
-    private TreeView<Path> projectTreeView; // The TreeView for the project structure
+    private final Map<Tab, Boolean> unsavedChangesMap = new HashMap<>();
+    private Path projectDirectory;
+    private TreeView<Path> projectTreeView;
 
     public EditorHandler(EditorScreen editorScreen, Path projectDirectory, TreeView<Path> projectTreeView) {
         this.editorScreen = editorScreen;
         this.projectDirectory = projectDirectory;
         this.projectTreeView = projectTreeView;
-        System.out.println("EditorHandler initialized with projectTree: " + projectTreeView);
-        refreshProjectTree(); // Initialize the tree with the current project directory
-        handleTabCloseEvent(); // Handle tab close events
+        refreshProjectTree();
+        setupProjectTreeContextMenu();
+        handleTabCloseEvent();
     }
 
-    // ============================== //
-    // === Handle "New" File Click === //
-    // ============================== //
-    public void handleNewFile(Stage stage) {
-        CodeArea newCodeArea = createCodeArea();
-        ScrollPane newScrollPane = createScrollPane(newCodeArea);
+    // ===================== File & Tab Handling =====================
 
+    public void handleNewFile(Stage stage) {
         Tab newTab = new Tab("Untitled");
-        newTab.setContent(newScrollPane);
+        CodeArea codeArea = createCodeArea(newTab);
+        ScrollPane scrollPane = createScrollPane(codeArea);
+        newTab.setContent(scrollPane);
 
         editorScreen.getEditorTabPane().getTabs().add(newTab);
         editorScreen.getEditorTabPane().getSelectionModel().select(newTab);
+        unsavedChangesMap.put(newTab, false);
     }
 
-    // ============================== //
-    // === Handle "Open" File Click == //
-    // ============================== //
     public void handleOpenFile(Stage stage) {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Open File");
-
-        // Set the initial directory to the current project directory
         fileChooser.setInitialDirectory(projectDirectory.toFile());
 
         File selectedFile = fileChooser.showOpenDialog(stage);
         if (selectedFile != null) {
             try {
                 String content = new String(Files.readAllBytes(selectedFile.toPath()));
-
-                CodeArea newCodeArea = createCodeArea();
-                newCodeArea.replaceText(content);
-
-                ScrollPane newScrollPane = createScrollPane(newCodeArea);
-
                 Tab newTab = new Tab(selectedFile.getName());
-                newTab.setContent(newScrollPane);
+                CodeArea codeArea = createCodeArea(newTab);
+                codeArea.replaceText(content);
+
+                ScrollPane scrollPane = createScrollPane(codeArea);
+                newTab.setContent(scrollPane);
 
                 editorScreen.getEditorTabPane().getTabs().add(newTab);
                 editorScreen.getEditorTabPane().getSelectionModel().select(newTab);
 
                 tabFileMap.put(newTab, selectedFile);
+                unsavedChangesMap.put(newTab, false);
 
-                newCodeArea.requestFocus();
+                codeArea.requestFocus();
             } catch (IOException e) {
                 showError("Failed to open file: " + e.getMessage());
             }
         }
     }
 
-    // ============================== //
-    // === Handle "Save" File Click == //
-    // ============================== //
     public void handleSaveFile(Stage stage) {
         Tab currentTab = editorScreen.getEditorTabPane().getSelectionModel().getSelectedItem();
         if (currentTab != null) {
             File file = tabFileMap.get(currentTab);
             if (file != null) {
                 saveCurrentTabContent(file, currentTab);
-                refreshProjectTree(); // Refresh the tree after saving
-                addFileToProjectTree(file); // Directly add the saved file to the tree
+                refreshProjectTree(); // Refresh entire tree after saving
             } else {
-                handleSaveAsFile(stage); // If no file is linked, prompt Save As
+                handleSaveAsFile(stage);
             }
         }
     }
 
-    // ================================ //
-    // == Handle "Save As" File Click == //
-    // ================================ //
     public void handleSaveAsFile(Stage stage) {
         Tab currentTab = editorScreen.getEditorTabPane().getSelectionModel().getSelectedItem();
         if (currentTab != null) {
             FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Save As");
-
-            // Set the initial directory to the current project directory
             fileChooser.setInitialDirectory(projectDirectory.toFile());
 
             File file = fileChooser.showSaveDialog(stage);
             if (file != null) {
                 saveCurrentTabContent(file, currentTab);
                 tabFileMap.put(currentTab, file);
-                currentTab.setText(file.getName());
-                addFileToProjectTree(file); // Add the new file to the project tree
-                refreshProjectTree(); // Refresh the tree after adding the file
+                updateTabTitle(currentTab, file.getName());
+                refreshProjectTree();
             }
         }
     }
 
-    // ============================== //
-    // === Update Project Tree === //
-    // ============================== //
-    private void addFileToProjectTree(File file) {
-        if (projectTreeView != null && projectDirectory != null) {
-            TreeItem<Path> root = projectTreeView.getRoot();
-            Path filePath = file.toPath();
-            TreeItem<Path> newItem = new TreeItem<>(filePath);
+    private void saveCurrentTabContent(File file, Tab tab) {
+        ScrollPane scrollPane = (ScrollPane) tab.getContent();
+        CodeArea codeArea = (CodeArea) scrollPane.getContent();
+        String content = codeArea.getText();
 
-            // Ensure that the parent directory is in the tree before adding the file
-            TreeItem<Path> parentDirectoryItem = findOrCreateParentDirectoryItem(root, filePath.getParent());
-
-            // Add the new file to the correct parent
-            if (parentDirectoryItem != null) {
-                parentDirectoryItem.getChildren().add(newItem);
-                projectTreeView.refresh(); // Refresh the tree immediately after adding a new file
-            } else {
-                System.err.println("Unable to add file: " + filePath);
+        try {
+            Path parentDir = file.toPath().getParent();
+            if (parentDir != null && !Files.exists(parentDir)) {
+                Files.createDirectories(parentDir); // Ensure parent directories exist
             }
+            Files.write(file.toPath(), content.getBytes());
+            markTabAsSaved(tab);
+            updateTabTitle(tab, file.getName());
+        } catch (IOException e) {
+            showError("Failed to save file: " + e.getMessage());
         }
     }
 
-    // Find or create a parent directory item
-    private TreeItem<Path> findOrCreateParentDirectoryItem(TreeItem<Path> rootItem, Path parentPath) {
-        for (TreeItem<Path> childItem : rootItem.getChildren()) {
-            if (childItem.getValue().equals(parentPath)) {
-                return childItem;
-            } else if (Files.isDirectory(childItem.getValue())) {
-                TreeItem<Path> foundItem = findOrCreateParentDirectoryItem(childItem, parentPath);
-                if (foundItem != null) {
-                    return foundItem;
-                }
+    private CodeArea createCodeArea(Tab tab) {
+        CodeArea codeArea = new CodeArea();
+        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
+        codeArea.getStyleClass().add("code-area");
+
+        codeArea.textProperty().addListener((obs, oldText, newText) -> {
+            if (!unsavedChangesMap.getOrDefault(tab, false)) {
+                unsavedChangesMap.put(tab, true);
+                updateTabTitle(tab, tab.getText().replace("*", ""));
             }
-        }
-        // If parent doesn't exist, create it
-        TreeItem<Path> newParentItem = new TreeItem<>(parentPath);
-        rootItem.getChildren().add(newParentItem);
-        return newParentItem;
+        });
+
+        return codeArea;
     }
 
-    // ============================== //
-    // === Update Project Directory === //
-    // ============================== //
-    public void updateProjectDirectory(Path newProjectDirectory) {
-        this.projectDirectory = newProjectDirectory;
-        refreshProjectTree(); // Refresh the tree when the directory is updated
+    private ScrollPane createScrollPane(CodeArea codeArea) {
+        ScrollPane scrollPane = new ScrollPane(codeArea);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setFitToHeight(true);
+        codeArea.prefWidthProperty().bind(scrollPane.widthProperty());
+        codeArea.prefHeightProperty().bind(scrollPane.heightProperty());
+        return scrollPane;
     }
+
+    // ===================== Project Tree Handling =====================
 
     public void refreshProjectTree() {
         if (projectDirectory == null || !Files.exists(projectDirectory)) {
             showError("Invalid project directory.");
             return;
         }
-
         TreeItem<Path> root = createTreeItem(projectDirectory);
         if (projectTreeView != null) {
             projectTreeView.setRoot(root);
-        } else {
-            // Handle the case when projectTree is null
-            System.err.println("Project Tree is not initialized yet.");
+            root.setExpanded(true);
+            projectTreeView.refresh();
         }
-        root.setExpanded(true); // Optionally expand the root
-        projectTreeView.refresh(); // Ensure the tree is refreshed immediately after a change
     }
 
     private TreeItem<Path> createTreeItem(Path path) {
@@ -209,58 +181,214 @@ public class EditorHandler {
         }
     }
 
-    // ============================== //
-    // === Handle Tab Close Event === //
-    // ============================== //
+    // ===================== Context Menu with New, Rename, Delete =====================
+
+    public void setupProjectTreeContextMenu() {
+        projectTreeView.setCellFactory(tv -> {
+            TreeCell<Path> cell = new TreeCell<>() {
+                @Override
+                protected void updateItem(Path item, boolean empty) {
+                    super.updateItem(item, empty);
+                    setText(empty || item == null ? "" : item.getFileName().toString());
+                }
+            };
+
+            ContextMenu contextMenu = new ContextMenu();
+
+            MenuItem newFile = new MenuItem("New File");
+            newFile.setOnAction(e -> {
+                Path selectedDir = getSelectedDirectory(cell);
+                if (selectedDir != null) {
+                    createNewFile(selectedDir);
+                }
+            });
+
+            MenuItem newFolder = new MenuItem("New Folder");
+            newFolder.setOnAction(e -> {
+                Path selectedDir = getSelectedDirectory(cell);
+                if (selectedDir != null) {
+                    createNewFolder(selectedDir);
+                }
+            });
+
+            MenuItem rename = new MenuItem("Rename");
+            rename.setOnAction(e -> {
+                Path selected = cell.getItem();
+                if (selected != null) {
+                    renameItem(selected);
+                }
+            });
+
+            MenuItem delete = new MenuItem("Delete");
+            delete.setOnAction(e -> {
+                Path selected = cell.getItem();
+                if (selected != null) {
+                    deleteItem(selected);
+                }
+            });
+
+            contextMenu.getItems().addAll(newFile, newFolder, rename, delete);
+
+            cell.emptyProperty().addListener((obs, wasEmpty, isNowEmpty) -> {
+                cell.setContextMenu(isNowEmpty ? null : contextMenu);
+            });
+
+            return cell;
+        });
+    }
+
+    private Path getSelectedDirectory(TreeCell<Path> cell) {
+        Path path = cell.getItem();
+        if (path != null && Files.isDirectory(path)) {
+            return path;
+        } else if (path != null) {
+            return path.getParent();
+        }
+        return null;
+    }
+
+    private void createNewFile(Path parentDir) {
+        TextInputDialog dialog = new TextInputDialog("NewFile.txt");
+        dialog.setTitle("New File");
+        dialog.setHeaderText("Create a New File");
+        dialog.setContentText("Enter file name:");
+
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(filename -> {
+            Path newFilePath = parentDir.resolve(filename);
+            try {
+                Files.createFile(newFilePath);
+                refreshProjectTree();
+            } catch (IOException e) {
+                showError("Failed to create file: " + e.getMessage());
+            }
+        });
+    }
+
+    private void createNewFolder(Path parentDir) {
+        TextInputDialog dialog = new TextInputDialog("NewFolder");
+        dialog.setTitle("New Folder");
+        dialog.setHeaderText("Create a New Folder");
+        dialog.setContentText("Enter folder name:");
+
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(folderName -> {
+            Path newFolderPath = parentDir.resolve(folderName);
+            try {
+                Files.createDirectory(newFolderPath);
+                refreshProjectTree();
+            } catch (IOException e) {
+                showError("Failed to create folder: " + e.getMessage());
+            }
+        });
+    }
+
+    private void renameItem(Path oldPath) {
+        TextInputDialog dialog = new TextInputDialog(oldPath.getFileName().toString());
+        dialog.setTitle("Rename");
+        dialog.setHeaderText("Rename File or Folder");
+        dialog.setContentText("Enter new name:");
+
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(newName -> {
+            Path newPath = oldPath.resolveSibling(newName);
+            try {
+                Files.move(oldPath, newPath);
+                refreshProjectTree();
+            } catch (IOException e) {
+                showError("Failed to rename: " + e.getMessage());
+            }
+        });
+    }
+
+    private void deleteItem(Path path) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Delete Confirmation");
+        confirm.setHeaderText("Are you sure you want to delete " + path.getFileName() + "?");
+        confirm.setContentText("This action cannot be undone.");
+
+        Optional<ButtonType> result = confirm.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            try {
+                if (Files.isDirectory(path)) {
+                    Files.walk(path)
+                            .sorted(Comparator.reverseOrder())
+                            .forEach(p -> {
+                                try {
+                                    Files.deleteIfExists(p);
+                                } catch (IOException ex) {
+                                    showError("Failed to delete: " + ex.getMessage());
+                                }
+                            });
+                } else {
+                    Files.deleteIfExists(path);
+                }
+                refreshProjectTree();
+            } catch (IOException e) {
+                showError("Failed to delete: " + e.getMessage());
+            }
+        }
+    }
+
+    // ===================== Utility =====================
+
     private void handleTabCloseEvent() {
         editorScreen.getEditorTabPane().getTabs().addListener((javafx.collections.ListChangeListener.Change<? extends Tab> change) -> {
             while (change.next()) {
                 if (change.wasRemoved()) {
                     for (Tab tab : change.getRemoved()) {
                         tabFileMap.remove(tab);
+                        unsavedChangesMap.remove(tab);
+                    }
+                } else if (change.wasAdded()) {
+                    for (Tab tab : change.getAddedSubList()) {
+                        tab.setOnCloseRequest(event -> {
+                            if (unsavedChangesMap.getOrDefault(tab, false)) {
+                                Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                                alert.setTitle("Unsaved Changes");
+                                alert.setHeaderText("You have unsaved changes.");
+                                alert.setContentText("Do you want to save before closing?");
+                                ButtonType save = new ButtonType("Save");
+                                ButtonType discard = new ButtonType("Discard");
+                                ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+                                alert.getButtonTypes().setAll(save, discard, cancel);
+
+                                Optional<ButtonType> result = alert.showAndWait();
+                                if (result.isPresent()) {
+                                    if (result.get() == save) {
+                                        handleSaveFile(null);
+                                    } else if (result.get() == cancel) {
+                                        event.consume();
+                                    }
+                                }
+                            }
+                        });
                     }
                 }
             }
         });
     }
 
-    // ============================== //
-    // === Helper Methods === //
-    // ============================== //
+    private void markTabAsSaved(Tab tab) {
+        unsavedChangesMap.put(tab, false);
+        updateTabTitle(tab, tab.getText().replace("*", ""));
+    }
+
+    private void updateTabTitle(Tab tab, String title) {
+        if (unsavedChangesMap.getOrDefault(tab, false)) {
+            if (!title.endsWith("*")) {
+                tab.setText(title + "*");
+            }
+        } else {
+            tab.setText(title);
+        }
+    }
+
     private void showError(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle("Error");
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
-    }
-
-    private CodeArea createCodeArea() {
-        CodeArea codeArea = new CodeArea();
-        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
-        codeArea.getStyleClass().add("code-area");
-        return codeArea;
-    }
-
-    private ScrollPane createScrollPane(CodeArea codeArea) {
-        ScrollPane scrollPane = new ScrollPane(codeArea);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setFitToHeight(true);
-
-        codeArea.prefWidthProperty().bind(scrollPane.widthProperty());
-        codeArea.prefHeightProperty().bind(scrollPane.heightProperty());
-        return scrollPane;
-    }
-
-    private void saveCurrentTabContent(File file, Tab tab) {
-        ScrollPane scrollPane = (ScrollPane) tab.getContent();
-        CodeArea codeArea = (CodeArea) scrollPane.getContent();
-        String content = codeArea.getText();
-
-        try {
-            Files.write(file.toPath(), content.getBytes());
-        } catch (IOException e) {
-            showError("Failed to save file: " + e.getMessage());
-        }
     }
 }

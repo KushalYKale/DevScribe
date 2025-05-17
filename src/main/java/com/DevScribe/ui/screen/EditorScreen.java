@@ -15,7 +15,6 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
@@ -25,7 +24,6 @@ import org.fxmisc.richtext.LineNumberFactory;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
 import java.time.Duration;
@@ -35,35 +33,43 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class EditorScreen {
     private double xOffset = 0;
     private double yOffset = 0;
+
     private BorderPane root;
     private TabPane editorTabPane;
-    private ScrollPane scrollPane;
-    private CodeArea codeArea;
-    private EditorHandler editorHandler;
-    public TreeView<Path> projectTree;
+    private TreeView<Path> projectTree;
     private Terminal terminal;
-
+    private EditorHandler editorHandler;
     private Path projectPath;
+
+    private final Map<Language, LanguageHighlighter> highlighterMap = Map.of(
+            Language.JAVA, new JavaHighlighter(),
+            Language.PYTHON, new PythonHighlighter(),
+            Language.C, new CHighlighter()
+    );
+
+    // Track language for currently opened file (default Java)
+    private Language currentLanguage = Language.JAVA;
+
+    public EditorScreen() {
+        terminal = new Terminal();
+    }
 
     public void start(Stage stage, Path projectPath) {
         this.projectPath = projectPath;
 
         if (!PathValidator.validateProjectPath(projectPath)) {
+            showErrorDialog("Invalid Project", "Project path is invalid or inaccessible.");
             return;
         }
+
         root = new BorderPane();
 
-        System.out.println("Opening editor for project: " + projectPath);
         stage.initStyle(StageStyle.UNDECORATED);
 
-
-        if (!PathValidator.validateProjectPath(projectPath)) {
-            return;
-        }
-
+        // Initialize project tree and editor handler
         projectTree = new TreeView<>(createTreeItem(projectPath));
         projectTree.setShowRoot(true);
-        projectTree.setCellFactory(param -> new TreeCell<Path>() {
+        projectTree.setCellFactory(param -> new TreeCell<>() {
             @Override
             protected void updateItem(Path item, boolean empty) {
                 super.updateItem(item, empty);
@@ -76,62 +82,107 @@ public class EditorScreen {
             }
         });
 
+        projectTree.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                TreeItem<Path> selectedItem = projectTree.getSelectionModel().getSelectedItem();
+                if (selectedItem != null && Files.isRegularFile(selectedItem.getValue())) {
+                    openFileInEditor(selectedItem.getValue());
+                }
+            }
+        });
+
         editorHandler = new EditorHandler(this, projectPath, projectTree);
-        terminal = new Terminal();
 
         setupEditorArea();
+
         root.setTop(createHeader(stage));
-        root.setLeft(leftNav());
-        loadProjectFiles();
+        root.setLeft(createLeftNav());
         root.setBottom(createStatusBar());
 
         Scene scene = new Scene(root, 1400, 750);
         scene.getStylesheets().add(getClass().getResource("/css/editor.css").toExternalForm());
         stage.setScene(scene);
         stage.show();
+
+        scene.getAccelerators().put(
+                javafx.scene.input.KeyCombination.keyCombination("Ctrl+N"),
+                () -> editorHandler.handleNewFile(stage)
+        );
+
+        scene.getAccelerators().put(
+                javafx.scene.input.KeyCombination.keyCombination("Ctrl+O"),
+                () -> editorHandler.handleOpenFile(stage)
+        );
+
+        scene.getAccelerators().put(
+                javafx.scene.input.KeyCombination.keyCombination("Ctrl+S"),
+                () -> editorHandler.handleSaveFile(stage)
+        );
+
+        scene.getAccelerators().put(
+                javafx.scene.input.KeyCombination.keyCombination("Ctrl+Shift+S"),
+                () -> editorHandler.handleSaveAsFile(stage)
+        );
     }
 
     public TabPane getEditorTabPane() {
         if (editorTabPane == null) {
-            editorTabPane = new TabPane();
+            setupEditorArea();
         }
         return editorTabPane;
     }
 
-    private boolean isRunningFromJar() {
-        String path = getClass().getProtectionDomain().getCodeSource().getLocation().getPath();
-        return path.endsWith(".jar");
+    private void setupEditorArea() {
+        editorTabPane = new TabPane();
+        editorTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.ALL_TABS);
+        editorTabPane.setTabMinWidth(100);
+        editorTabPane.setStyle("-fx-background-color: #1e1e24;");
+
+        terminal.setVisible(false);
+        terminal.setManaged(false);
+        terminal.setPrefHeight(150);
+
+        VBox editorTerminalContainer = new VBox(editorTabPane, terminal);
+        VBox.setVgrow(editorTabPane, Priority.ALWAYS);
+        VBox.setVgrow(terminal, Priority.SOMETIMES);
+
+        root.setCenter(editorTerminalContainer);
     }
 
-    private void loadProjectFiles() {
-        Path defaultFilePath;
 
-        if (isRunningFromJar()) {
-            defaultFilePath = Paths.get(System.getProperty("user.home"), "DevScribe", "projects", "src", "main.java");
-        } else {
-            defaultFilePath = projectPath.resolve("src").resolve("main.java");
-        }
+    private VBox createLeftNav() {
+        VBox leftNav = new VBox();
+        leftNav.getStyleClass().add("left-nav");
 
+        VBox projectToolbar = new VBox();
+        projectToolbar.getStyleClass().add("project-toolbar");
 
-        if (Files.exists(defaultFilePath)) {
-            try {
-                String content = Files.readString(defaultFilePath);
-                codeArea.replaceText(content);
-            } catch (IOException e) {
-                showErrorDialog("Error", "Failed to read the file.");
+        Button toggleBtn = new Button("Folder");
+        toggleBtn.getStyleClass().add("folder-toggle-btn");
+        projectToolbar.getChildren().add(toggleBtn);
+
+        VBox directory = new VBox();
+        Label directoryLabel = new Label("Project");
+        directoryLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white; -fx-pref-width: 250px; -fx-background-color: #23232B");
+
+        directory.getChildren().add(directoryLabel);
+        directory.getChildren().add(projectTree);
+
+        AtomicBoolean isVisible = new AtomicBoolean(true);
+        toggleBtn.setOnAction(e -> {
+            isVisible.set(!isVisible.get());
+            directory.setVisible(isVisible.get());
+            directory.setManaged(isVisible.get());
+
+            FontIcon icon = (FontIcon) toggleBtn.getGraphic();
+            if (icon != null) {
+                icon.setIconCode(isVisible.get() ? MaterialDesignF.FOLDER : MaterialDesignF.FOLDER_OPEN);
             }
-        } else {
-            // If no default file, show a placeholder message
-            codeArea.replaceText("// No files found. Start coding...");
-        }
-    }
+        });
 
-    private void showErrorDialog(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
+        HBox container = new HBox(projectToolbar, directory);
+        leftNav.getChildren().add(container);
+        return leftNav;
     }
 
     private HBox createHeader(Stage stage) {
@@ -172,31 +223,25 @@ public class EditorScreen {
         CheckMenuItem toggleTerminal = new CheckMenuItem("Show Terminal");
         MenuItem zoomIn = new MenuItem("Zoom In");
         MenuItem zoomOut = new MenuItem("Zoom Out");
-        viewMenu.getItems().addAll(toggleTerminal,wordWrap, new SeparatorMenuItem(), zoomIn, zoomOut);
+        viewMenu.getItems().addAll(toggleTerminal, wordWrap, new SeparatorMenuItem(), zoomIn, zoomOut);
 
         toggleTerminal.setOnAction(event -> {
-            if (terminal.isVisible()) {
-                // Hide the terminal
-                terminal.setVisible(false);
-                terminal.setManaged(false);
-            } else {
-                // Show the terminal
-                terminal.setVisible(true);
-                terminal.setManaged(true);
-            }
+            boolean visible = toggleTerminal.isSelected();
+            terminal.setVisible(visible);
+            terminal.setManaged(visible);
         });
+
         menuBar.getChildren().addAll(fileMenu, editMenu, viewMenu);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         Button runButton = createTitleBarButton("\u25B6", () -> {
-            if (editorTabPane.getSelectionModel().getSelectedItem() != null) {
-                Tab selectedTab = editorTabPane.getSelectionModel().getSelectedItem();
-                ScrollPane tabContent = (ScrollPane) selectedTab.getContent();
-                CodeArea area = (CodeArea) tabContent.getContent();
-                String fileName = selectedTab.getText();
-                Path filePath = findFileInProject(fileName);
+            Tab selectedTab = editorTabPane.getSelectionModel().getSelectedItem();
+            if (selectedTab != null) {
+                ScrollPane scrollPane = (ScrollPane) selectedTab.getContent();
+                CodeArea area = (CodeArea) scrollPane.getContent();
+                Path filePath = findFileInProject(selectedTab.getText());
 
                 if (filePath != null) {
                     terminal.showTerminal(filePath, area.getText());
@@ -221,6 +266,7 @@ public class EditorScreen {
 
         titleBar.getChildren().addAll(logoTitleGroup, menuBar, spacer, buttonContainer);
 
+        // Dragging window
         titleBar.setOnMousePressed(event -> {
             xOffset = event.getSceneX();
             yOffset = event.getSceneY();
@@ -231,11 +277,12 @@ public class EditorScreen {
             stage.setY(event.getScreenY() - yOffset);
         });
 
+        // File menu actions
         newFile.setOnAction(e -> editorHandler.handleNewFile(stage));
         openFile.setOnAction(e -> editorHandler.handleOpenFile(stage));
         saveFile.setOnAction(e -> editorHandler.handleSaveFile(stage));
         saveAsFile.setOnAction(e -> editorHandler.handleSaveAsFile(stage));
-        exit.setOnAction(e -> ScreenManager.switchToLauncher((Stage) root.getScene().getWindow()));
+        exit.setOnAction(e -> ScreenManager.switchToLauncher(stage));
 
         return titleBar;
     }
@@ -260,215 +307,122 @@ public class EditorScreen {
         }
     }
 
-    private VBox leftNav() {
-        VBox leftNav = new VBox();
-        leftNav.getStyleClass().add("left-nav");
-
-        VBox projectToolbar = createProjectToolbar();
-        VBox projectDirectory = createProjectDirectory();
-
-        Button toggleBtn = (Button) projectToolbar.getChildren().get(0);
-        AtomicBoolean isVisible = new AtomicBoolean(true);
-
-        toggleBtn.setOnAction(e -> {
-            isVisible.set(!isVisible.get());
-            projectDirectory.setVisible(isVisible.get());
-            projectDirectory.setManaged(isVisible.get());
-
-            FontIcon icon = (FontIcon) toggleBtn.getGraphic();
-            icon.setIconCode(isVisible.get()
-                    ? MaterialDesignF.FOLDER
-                    : MaterialDesignF.FOLDER_OPEN);
-        });
-
-        StackPane directoryContainer = new StackPane(projectDirectory);
-        HBox container = new HBox(projectToolbar, directoryContainer);
-
-        leftNav.getChildren().addAll(container);
-        return leftNav;
-    }
-
-    private VBox createProjectToolbar() {
-        VBox toolbar = new VBox();
-        toolbar.getStyleClass().add("project-toolbar");
-
-        Button toggleBtn = new Button("Folder");
-        toggleBtn.getStyleClass().add("folder-toggle-btn");
-
-        toolbar.getChildren().addAll(toggleBtn);
-        return toolbar;
-    }
-
-    private VBox createProjectDirectory() {
-        VBox directory = new VBox();
-
-        Label directoryLabel = new Label("Project");
-        directoryLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white; -fx-pref-width: 250px; -fx-background-color: #23232B");
-
-        if (projectPath == null || !Files.exists(projectPath) || !Files.isDirectory(projectPath)) {
-            Label error = new Label("Invalid or empty project path.");
-            error.setStyle("-fx-text-fill: red;");
-            directory.getChildren().addAll(directoryLabel, error);
-            return directory;
-        }
-
-        TreeItem<Path> rootItem = createTreeItem(projectPath);
-        rootItem.setExpanded(true);
-        projectTree = new TreeView<>(rootItem);
-        projectTree.setShowRoot(true);
-
-        projectTree.setCellFactory(param -> new TreeCell<Path>() {
-            @Override
-            protected void updateItem(Path item, boolean empty) {
-                super.updateItem(item, empty);
-
-                if (empty || item == null) {
-                    setText(null);
-                    setGraphic(null);
-                } else {
-                    setText(item.getFileName().toString());
-                }
-            }
-        });
-
-        projectTree.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2) {
-                TreeItem<Path> selectedItem = projectTree.getSelectionModel().getSelectedItem();
-                if (selectedItem != null && Files.isRegularFile(selectedItem.getValue())) {
-                    openFileInEditor(selectedItem.getValue());
-                }
-            }
-        });
-
-        projectTree.getStyleClass().add("tree-view");
-
-        directory.getChildren().addAll(directoryLabel, projectTree);
-        return directory;
-    }
-
-    private TreeItem<Path> createTreeItem(Path path) {
-        TreeItem<Path> item = new TreeItem<>(path);
-        item.setGraphic(new Label(path.getFileName().toString()));
-
-        if (Files.isDirectory(path)) {
-            try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
-                for (Path child : stream) {
-                    item.getChildren().add(createTreeItem(child));
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        return item;
-    }
-
-    private void openFileInEditor(Path filePath) {
+    private CodeArea openFileInEditor(Path filePath) {
         if (editorTabPane == null) {
-            System.err.println("EditorTabPane not initialized.");
-            return;
+            setupEditorArea();
         }
 
+        // If tab already open, select it
         for (Tab tab : editorTabPane.getTabs()) {
             if (tab.getText().equals(filePath.getFileName().toString())) {
                 editorTabPane.getSelectionModel().select(tab);
-                return;
+                return null;
             }
         }
 
-        String fileName = filePath.getFileName().toString();
-        Tab fileTab = new Tab(fileName);
-        fileTab.setClosable(true);
-        fileTab.getStyleClass().add("tab");
-//        fileTab.setStyle("-fx-background-color: #23232B; -fx-text-fill: white; -fx-font-size: 14px;");
-
-        CodeArea editorArea = new CodeArea();
-        editorArea.setWrapText(true);
-        editorArea.setParagraphGraphicFactory(LineNumberFactory.get(editorArea));
-        editorArea.getStyleClass().add("code-area");
-        bindHighlighting(editorArea);
-
+        String content = "";
         try {
-            String content = Files.readString(filePath);
-            editorArea.replaceText(content);
+            content = Files.readString(filePath);
         } catch (IOException e) {
-            editorArea.replaceText("Error reading file.");
+            showErrorDialog("File Open Error", "Could not open file: " + e.getMessage());
+            return null;
         }
 
-        ScrollPane scrollPane = new ScrollPane(editorArea);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setFitToHeight(true);
+        CodeArea codeArea = new CodeArea(content);
+        codeArea.setWrapText(true);
+        codeArea.minHeight(550);
 
-        fileTab.setContent(scrollPane);
-        editorTabPane.getTabs().add(fileTab);
-        editorTabPane.getSelectionModel().select(fileTab);
+        Tab tab = new Tab(filePath.getFileName().toString());
+        ScrollPane scrollPane = new ScrollPane(codeArea);
+        scrollPane.setFitToHeight(true);
+        scrollPane.setFitToWidth(true);
+        tab.setContent(scrollPane);
+
+        Language language = determineLanguageFromExtension(filePath);
+        applySyntaxHighlighting(codeArea, language);
+
+        final String originalContent = content;
+
+        // Add listener for changes in codeArea text
+        codeArea.textProperty().addListener((obs, oldText, newText) -> {
+            if (!newText.equals(originalContent)) {
+                // Mark tab as unsaved by adding "*" prefix if not already there
+                if (!tab.getText().startsWith("*")) {
+                    tab.setText("*" + filePath.getFileName().toString());
+                }
+            } else {
+                // Remove unsaved indicator if text matches original
+                if (tab.getText().startsWith("*")) {
+                    tab.setText(filePath.getFileName().toString());
+                }
+            }
+        });
+
+
+        editorTabPane.getTabs().add(tab);
+        editorTabPane.getSelectionModel().select(tab);
+        return codeArea;
     }
 
+
+    private Language determineLanguageFromExtension(Path filePath) {
+        String filename = filePath.getFileName().toString().toLowerCase();
+        if (filename.endsWith(".java")) return Language.JAVA;
+        else if (filename.endsWith(".py")) return Language.PYTHON;
+        else if (filename.endsWith(".c") || filename.endsWith(".h")) return Language.C;
+        else return Language.JAVA; // default fallback
+    }
+
+    private void applySyntaxHighlighting(CodeArea codeArea, Language language) {
+        LanguageHighlighter highlighter = highlighterMap.get(language);
+        if (highlighter == null) return;
+
+        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
+        codeArea.richChanges()
+                .filter(ch -> !ch.getInserted().equals(ch.getRemoved())) // only when text changes
+                .successionEnds(Duration.ofMillis(500))
+                .subscribe(ignore -> {
+                    int caretPosition = codeArea.getCaretPosition();
+                    codeArea.setStyleSpans(0, highlighter.computeHighlighting(codeArea.getText()));
+                    codeArea.moveTo(caretPosition);
+                });
+
+        // Initial highlighting
+        codeArea.setStyleSpans(0, highlighter.computeHighlighting(codeArea.getText()));
+    }
+
+    private TreeItem<Path> createTreeItem(Path path) {
+        TreeItem<Path> rootItem = new TreeItem<>(path);
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
+            for (Path entry : stream) {
+                if (Files.isDirectory(entry)) {
+                    rootItem.getChildren().add(createTreeItem(entry));
+                } else {
+                    rootItem.getChildren().add(new TreeItem<>(entry));
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return rootItem;
+    }
 
     private HBox createStatusBar() {
         HBox statusBar = new HBox();
         statusBar.getStyleClass().add("status-bar");
 
         Label statusLabel = new Label("Ready");
-        statusBar.getChildren().add(statusLabel);
+        statusLabel.getStyleClass().add("status-label");
 
+        statusBar.getChildren().add(statusLabel);
         return statusBar;
     }
 
-    private void setupEditorArea() {
-        editorTabPane = new TabPane();
-        editorTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.ALL_TABS);
-        editorTabPane.setTabMinWidth(100);
-        editorTabPane.setStyle("-fx-background-color: #1e1e24");
-
-        codeArea = new CodeArea();
-        codeArea.setEditable(true);
-        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
-        codeArea.getStyleClass().add("code-area");
-
-        bindHighlighting(codeArea);
-
-        scrollPane = new ScrollPane(codeArea);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setFitToHeight(true);
-
-
-        root.setCenter(createEditorAndTerminalArea());
+    private void showErrorDialog(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
-
-    private Language currentLanguage = Language.JAVA;
-    private final Map<Language, LanguageHighlighter> highlighterMap = Map.of(
-            Language.JAVA, (LanguageHighlighter) new JavaHighlighter(),
-            Language.PYTHON, (LanguageHighlighter) new PythonHighlighter(),
-            Language.C, (LanguageHighlighter) new CHighlighter()
-    );
-
-    private void bindHighlighting(CodeArea codeArea) {
-        codeArea.multiPlainChanges()
-                .successionEnds(Duration.ofMillis(300))
-                .subscribe(ignore -> {
-                    LanguageHighlighter highlighter = highlighterMap.get(currentLanguage);
-                    codeArea.setStyleSpans(0, highlighter.computeHighlighting(codeArea.getText()));
-                });
-    }
-
-    private VBox createEditorAndTerminalArea() {
-        VBox editorTerminalContainer = new VBox();
-
-        VBox.setVgrow(editorTabPane, Priority.SOMETIMES);
-
-        VBox.setVgrow(terminal, Priority.SOMETIMES);
-
-        editorTabPane.setMinHeight(550);
-
-        terminal.setVisible(false);
-        terminal.setManaged(false);
-        terminal.setPrefHeight(300);
-
-        editorTerminalContainer.getChildren().addAll(editorTabPane, terminal);
-
-        return editorTerminalContainer;
-    }
-
-
 }
