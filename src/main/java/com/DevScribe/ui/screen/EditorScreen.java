@@ -40,6 +40,7 @@ public class EditorScreen {
     private Terminal terminal;
     private EditorHandler editorHandler;
     private Path projectPath;
+    private boolean isDarkTheme = true;
 
     private final Map<Language, LanguageHighlighter> highlighterMap = Map.of(
             Language.JAVA, new JavaHighlighter(),
@@ -47,15 +48,16 @@ public class EditorScreen {
             Language.C, new CHighlighter()
     );
 
-    // Track language for currently opened file (default Java)
     private Language currentLanguage = Language.JAVA;
 
     public EditorScreen() {
         terminal = new Terminal();
     }
 
-    public void start(Stage stage, Path projectPath) {
+
+    public void start(Stage stage, Path projectPath,boolean isDarkTheme){
         this.projectPath = projectPath;
+        this.isDarkTheme = isDarkTheme;
 
         if (!PathValidator.validateProjectPath(projectPath)) {
             showErrorDialog("Invalid Project", "Project path is invalid or inaccessible.");
@@ -63,10 +65,8 @@ public class EditorScreen {
         }
 
         root = new BorderPane();
-
         stage.initStyle(StageStyle.UNDECORATED);
 
-        // Initialize project tree and editor handler
         projectTree = new TreeView<>(createTreeItem(projectPath));
         projectTree.setShowRoot(true);
         projectTree.setCellFactory(param -> new TreeCell<>() {
@@ -102,7 +102,9 @@ public class EditorScreen {
         Scene scene = new Scene(root, 1400, 750);
         scene.getStylesheets().add(getClass().getResource("/css/editor.css").toExternalForm());
         stage.setScene(scene);
+        updateTheme(scene);
         stage.show();
+
 
         scene.getAccelerators().put(
                 javafx.scene.input.KeyCombination.keyCombination("Ctrl+N"),
@@ -125,11 +127,18 @@ public class EditorScreen {
         );
     }
 
+
     public TabPane getEditorTabPane() {
         if (editorTabPane == null) {
             setupEditorArea();
         }
         return editorTabPane;
+    }
+
+    private void updateTheme(Scene scene) {
+        System.out.println("Updating theme: isDarkTheme = " + isDarkTheme);
+        scene.getRoot().getStyleClass().removeAll("dark-theme", "light-theme");
+        scene.getRoot().getStyleClass().add(isDarkTheme ? "dark-theme" : "light-theme");
     }
 
     private void setupEditorArea() {
@@ -221,14 +230,20 @@ public class EditorScreen {
         MenuButton viewMenu = new MenuButton("View");
         CheckMenuItem wordWrap = new CheckMenuItem("Word Wrap");
         CheckMenuItem toggleTerminal = new CheckMenuItem("Show Terminal");
+        CheckMenuItem toggleTheme = new CheckMenuItem("Dark Mode");
         MenuItem zoomIn = new MenuItem("Zoom In");
         MenuItem zoomOut = new MenuItem("Zoom Out");
-        viewMenu.getItems().addAll(toggleTerminal, wordWrap, new SeparatorMenuItem(), zoomIn, zoomOut);
+        viewMenu.getItems().addAll(toggleTerminal, wordWrap, toggleTheme, new SeparatorMenuItem(), zoomIn, zoomOut);
 
         toggleTerminal.setOnAction(event -> {
             boolean visible = toggleTerminal.isSelected();
             terminal.setVisible(visible);
             terminal.setManaged(visible);
+        });
+
+        toggleTheme.setOnAction(event -> {
+            isDarkTheme = toggleTheme.isSelected();
+            updateTheme(stage.getScene());
         });
 
         menuBar.getChildren().addAll(fileMenu, editMenu, viewMenu);
@@ -392,20 +407,27 @@ public class EditorScreen {
     }
 
     private TreeItem<Path> createTreeItem(Path path) {
-        TreeItem<Path> rootItem = new TreeItem<>(path);
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
-            for (Path entry : stream) {
-                if (Files.isDirectory(entry)) {
-                    rootItem.getChildren().add(createTreeItem(entry));
-                } else {
-                    rootItem.getChildren().add(new TreeItem<>(entry));
+        TreeItem<Path> treeItem = new TreeItem<>(path);
+        if (Files.isDirectory(path)) {
+            // Add a dummy child to show expand icon
+            treeItem.getChildren().add(new TreeItem<>(null));
+            // Add expansion listener to load children lazily
+            treeItem.expandedProperty().addListener((obs, wasExpanded, isNowExpanded) -> {
+                if (isNowExpanded && treeItem.getChildren().size() == 1 && treeItem.getChildren().get(0).getValue() == null) {
+                    treeItem.getChildren().clear();
+                    try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
+                        for (Path entry : stream) {
+                            treeItem.getChildren().add(createTreeItem(entry));
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+            });
         }
-        return rootItem;
+        return treeItem;
     }
+
 
     private HBox createStatusBar() {
         HBox statusBar = new HBox();

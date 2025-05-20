@@ -54,8 +54,12 @@ public class LauncherScreen {
         updateTheme(scene);
 
         themeToggle = new ToggleButton("Switch to Light");
-        themeToggle.setOnAction(e -> toggleTheme());
+        themeToggle.setOnAction(e -> {
+            toggleTheme();
+        });
         themeToggle.getStyleClass().add("toolbar-button");
+
+
 
         HBox bottomBar = new HBox(themeToggle);
         bottomBar.setAlignment(Pos.CENTER_RIGHT);
@@ -67,7 +71,8 @@ public class LauncherScreen {
     }
 
     private void toggleTheme() {
-        isDarkMode = !isDarkMode;
+        isDarkMode = themeToggle.isSelected();
+        ScreenManager.setDarkMode(isDarkMode);
         themeToggle.setText(isDarkMode ? "Switch to Light" : "Switch to Dark");
         updateTheme(root.getScene());
     }
@@ -75,6 +80,8 @@ public class LauncherScreen {
     private void updateTheme(Scene scene) {
         scene.getRoot().getStyleClass().removeAll("dark-theme", "light-theme");
         scene.getRoot().getStyleClass().add(isDarkMode ? "dark-theme" : "light-theme");
+
+        System.out.println(isDarkMode);
 
         projectListView.getStyleClass().removeAll("project-list-dark", "project-list-light");
         projectListView.getStyleClass().add(isDarkMode ? "project-list-dark" : "project-list-light");
@@ -150,7 +157,6 @@ public class LauncherScreen {
         BorderPane contentArea = new BorderPane();
         contentArea.setTop(createToolbar());
 
-        // Create ListView and set the cell factory
         projectListView = new ListView<>(projectList);
         projectListView.getStyleClass().add(isDarkMode ? "project-list-dark" : "project-list-light");
 
@@ -166,7 +172,6 @@ public class LauncherScreen {
                         VBox infoBox = new VBox(5);
                         infoBox.setPadding(new Insets(8));
 
-                        // Set dynamic background color based on theme
                         if (isDarkMode) {
                             infoBox.setStyle("-fx-background-color: #3a3a3a; -fx-background-radius: 10;");
                         } else {
@@ -256,7 +261,7 @@ public class LauncherScreen {
 
                     // Check if the path is valid before starting the editor
                     if (Files.exists(projectPath) && Files.isDirectory(projectPath)) {
-                        new EditorScreen().start(stage, projectPath);
+                        new EditorScreen().start(stage, projectPath,isDarkMode);
                     } else {
                         showError("Invalid project path.");
                     }
@@ -288,7 +293,7 @@ public class LauncherScreen {
 
                 addProjectToList(selectedDirectory.getName(), projectPath.toString());
                 System.out.println("Launching editor screen...");
-                new EditorScreen().start(stage, projectPath);
+                new EditorScreen().start(stage, projectPath,isDarkMode);
             }
         });
 

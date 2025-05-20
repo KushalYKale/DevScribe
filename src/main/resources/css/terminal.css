@@ -11,5 +11,30 @@
 }
 
 .inline-css .caret {
-    -fx-stroke: #00ff00;
+    -fx-stroke: #00ff00 !important;
 }
+
+.inline-css .error {
+    -fx-fill: #FF5555 !important; /* red */
+    -fx-font-weight: bold;
+}
+
+.inline-css .warning {
+    -fx-fill: #FFA500 !important; /* orange */
+    -fx-font-weight: bold;
+}
+
+.inline-css .info {
+    -fx-fill: #55FF55 !important; /* green */
+}
+
+
+/* Optional scrollbar styling */
+.inline-css .scroll-bar:vertical {
+    -fx-background-color: #2e2e2e !important;
+}
+
+.inline-css .scroll-bar .thumb {
+    -fx-background-color: #555555 !important;
+}
+
