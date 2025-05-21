@@ -20,6 +20,7 @@ public class Terminal extends VBox {
     private final InlineCssTextArea terminalArea;
     private OutputStream processInput;
     private Process currentProcess;
+    private ProcessStreamer processStreamer;
     private int promptPosition;
 
     // To track if a python retry after install is done
@@ -45,10 +46,51 @@ public class Terminal extends VBox {
         });
 
         terminalArea.addEventFilter(KeyEvent.KEY_PRESSED, this::handleKeyPressed);
+
+        // Add Ctrl+C handling for interrupt
+        terminalArea.addEventFilter(KeyEvent.KEY_PRESSED, this::handleCtrlCInterrupt);
+
+        // Prevent mouse from moving caret before promptPosition
+        terminalArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
+            if (newPos.intValue() < promptPosition) {
+                Platform.runLater(() -> terminalArea.moveTo(promptPosition));
+            }
+        });
+    }
+
+    private void handleCtrlCInterrupt(KeyEvent event) {
+        if (event.isControlDown() && event.getCode() == KeyCode.C) {
+            event.consume();
+            if (currentProcess != null && currentProcess.isAlive()) {
+                // Attempt to send SIGINT to process
+                try {
+                    sendInterruptToProcess();
+                    appendText("\n^C\n", "-fx-fill: orange; -fx-font-weight: bold;");
+                } catch (Exception e) {
+                    appendText("[ERROR] Failed to send interrupt: " + e.getMessage() + "\n", "-fx-fill: red;");
+                }
+            }
+            appendPrompt();
+        }
+    }
+
+    // Platform-dependent way to send SIGINT (Ctrl+C) to process
+    private void sendInterruptToProcess() throws IOException {
+        String os = System.getProperty("os.name").toLowerCase();
+        if (os.contains("win")) {
+            // On Windows: forcibly destroy process (no SIGINT equivalent)
+            currentProcess.destroy();
+        } else {
+            // On Unix-like: send SIGINT signal
+            long pid = currentProcess.pid();
+            Runtime.getRuntime().exec(new String[]{"kill", "-2", Long.toString(pid)});
+        }
     }
 
     private void handleKeyPressed(KeyEvent event) {
         int caretPos = terminalArea.getCaretPosition();
+
+        // Disallow editing before promptPosition
         if (caretPos < promptPosition) {
             terminalArea.moveTo(terminalArea.getLength());
             event.consume();
@@ -76,6 +118,11 @@ public class Terminal extends VBox {
                 if (caretPos <= promptPosition) {
                     event.consume();
                 }
+            }
+            // Prevent deleting prompt or moving left into prompt area
+            case HOME -> {
+                event.consume();
+                terminalArea.moveTo(promptPosition);
             }
         }
     }
@@ -126,6 +173,10 @@ public class Terminal extends VBox {
     }
 
     private void cleanupProcess() {
+        if (processStreamer != null) {
+            processStreamer.stopStreaming();
+            processStreamer = null;
+        }
         if (currentProcess != null) {
             currentProcess.destroy();
             currentProcess = null;
@@ -167,7 +218,7 @@ public class Terminal extends VBox {
 
     // Python run with auto-install
     private void runPythonWithAutoInstall(Path filePath) throws IOException {
-        String pythonCmd = System.getProperty("os.name").toLowerCase().contains("win") ? "python" : "python3";
+        String pythonCmd = getPythonCommand();
         runProcessWithOutputHandling(new String[]{pythonCmd, filePath.toString()}, null, true);
     }
 
@@ -196,7 +247,11 @@ public class Terminal extends VBox {
         appendText("Compiling Java file: " + fileName + "\n");
 
         Process compileProcess = compileBuilder.start();
-        streamProcessOutputWithStyle(compileProcess.getInputStream());
+
+        // Use ProcessStreamer here as well for compile output
+        ProcessStreamer compileStreamer = new ProcessStreamer(compileProcess.getInputStream(), line -> appendText(line + "\n", detectStyleFromLine(line)));
+        compileStreamer.startStreaming();
+
         int compileExitCode;
         try {
             compileExitCode = compileProcess.waitFor();
@@ -205,6 +260,7 @@ public class Terminal extends VBox {
             cleanupProcess();
             return;
         }
+        compileStreamer.stopStreaming();
 
         if (compileExitCode != 0) {
             appendText("Compilation failed. Check for missing packages or syntax errors.\n");
@@ -237,17 +293,10 @@ public class Terminal extends VBox {
 
         setProcessInput(currentProcess.getOutputStream());
 
-        InputStream stdout = currentProcess.getInputStream();
-        InputStream stderr = currentProcess.getErrorStream();
-
-        // Stream stdout
-        new Thread(() -> streamProcessOutputWithStyle(stdout)).start();
-
-        // Stream stderr for error parsing & Python auto-install
-        new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stderr))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
+        // Create ProcessStreamer that reads both stdout and stderr
+        processStreamer = new ProcessStreamer(currentProcess.getInputStream(), currentProcess.getErrorStream(),
+                line -> {
+                    // Handle Python auto-install on stderr lines
                     if (handlePythonAutoInstall && line.contains("ModuleNotFoundError")) {
                         String missingModule = extractPythonMissingModule(line);
                         if (missingModule != null && !pythonRetry.get()) {
@@ -256,37 +305,62 @@ public class Terminal extends VBox {
                             if (installed) {
                                 appendText("[INFO] Module '" + missingModule + "' installed. Retrying...\n", "-fx-fill: green;");
                                 pythonRetry.set(true);
-                                currentProcess.destroy(); // Kill current process before retry
-                                runPythonWithAutoInstall(Path.of(command[1]));
-                                return; // Exit current thread
-                            } else {
-                                appendText("[ERROR] Failed to install module '" + missingModule + "'. Please install it manually.\n", "-fx-fill: red;");
+                                if (currentProcess != null) {
+                                    currentProcess.destroy();
+                                }
+                                try {
+                                    runPythonWithAutoInstall(Path.of(command[1]));
+                                } catch (IOException e) {
+                                    appendText("[ERROR] Failed to rerun Python script: " + e.getMessage() + "\n", "-fx-fill: red;");
+                                }
+                                return; // Skip printing this line again
                             }
                         }
                     }
                     appendText(line + "\n", detectStyleFromLine(line));
-                }
-            } catch (IOException e) {
-                appendText("[ERROR] Error reading process stderr: " + e.getMessage() + "\n", "-fx-fill: red;");
-            }
-        }).start();
+                });
+
+        processStreamer.startStreaming();
 
         appendPrompt();
+
         new Thread(() -> {
             try {
                 int exitCode = currentProcess.waitFor();
+                processStreamer.stopStreaming();
                 appendText("\nProcess exited with code: " + exitCode + "\n");
                 cleanupProcess();
             } catch (InterruptedException e) {
-                appendText("\nProcess interrupted.\n");
+                appendText("\nProcess was interrupted.\n");
                 cleanupProcess();
             }
         }).start();
     }
 
-    // Extract missing Python module name from error line
+    private boolean installPythonModule(String module) {
+        try {
+            appendText("[INFO] Installing Python module '" + module + "' via pip...\n");
+            ProcessBuilder pb = new ProcessBuilder(getPythonCommand(), "-m", "pip", "install", module);
+            Process p = pb.start();
+
+            // Stream output synchronously (blocking)
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                 BufferedReader errBr = new BufferedReader(new InputStreamReader(p.getErrorStream()))) {
+                String line;
+                while ((line = br.readLine()) != null) appendText(line + "\n");
+                while ((line = errBr.readLine()) != null) appendText(line + "\n");
+            }
+
+            int exitCode = p.waitFor();
+            return exitCode == 0;
+        } catch (Exception e) {
+            appendText("[ERROR] Failed to install Python module: " + e.getMessage() + "\n");
+            return false;
+        }
+    }
+
     private String extractPythonMissingModule(String line) {
-        Pattern p = Pattern.compile("No module named ['\"]([^'\"]+)['\"]");
+        Pattern p = Pattern.compile("No module named '([^']+)'");
         Matcher m = p.matcher(line);
         if (m.find()) {
             return m.group(1);
@@ -294,97 +368,27 @@ public class Terminal extends VBox {
         return null;
     }
 
-    // Run 'pip install <module>'
-    private boolean installPythonModule(String module) {
-        try {
-            appendText("[INFO] Installing Python module '" + module + "'...\n", "-fx-fill: orange;");
-            ProcessBuilder pb = new ProcessBuilder(getPythonCommand(), "-m", "pip", "install", module);
-            Process p = pb.start();
-
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    appendText("[pip] " + line + "\n");
-                }
-            }
-
-            int exitCode = p.waitFor();
-            return exitCode == 0;
-        } catch (Exception e) {
-            appendText("[ERROR] Exception during pip install: " + e.getMessage() + "\n", "-fx-fill: red;");
-            return false;
-        }
-    }
-
     private String getPythonCommand() {
         return System.getProperty("os.name").toLowerCase().contains("win") ? "python" : "python3";
     }
 
-    // Detect error/warning lines and assign styles
-    private String detectStyleFromLine(String line) {
-        String lower = line.toLowerCase();
-
-        if (lower.contains("error:") || lower.contains("exception") || lower.startsWith("traceback")) {
-            return "-fx-fill: red; -fx-font-weight: bold;";
-        }
-
-        if (lower.contains("warning:")) {
-            return "-fx-fill: orange; -fx-font-weight: bold;";
-        }
-
-        if (lower.contains("gcc") && (lower.contains("error") || lower.contains("warning"))) {
-            return lower.contains("error") ? "-fx-fill: red; -fx-font-weight: bold;" : "-fx-fill: orange; -fx-font-weight: bold;";
-        }
-
-        return null; // default no style
-    }
-
-    // Stream input stream lines into terminal with basic style detection
-    private void streamProcessOutputWithStyle(InputStream inputStream) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                appendText(line + "\n", detectStyleFromLine(line));
-            }
-        } catch (IOException e) {
-            appendText("[ERROR] Reading process output failed: " + e.getMessage() + "\n", "-fx-fill: red;");
-        }
-    }
-
-    private void startInteractiveShell() {
-        try {
-            String shell = System.getenv().getOrDefault("SHELL", System.getProperty("os.name").toLowerCase().contains("win") ? "cmd" : "/bin/bash");
-            ProcessBuilder builder = new ProcessBuilder(shell);
-            currentProcess = builder.start();
-            setProcessInput(currentProcess.getOutputStream());
-
-            // Stream stdout
-            new Thread(() -> streamProcessOutputWithStyle(currentProcess.getInputStream())).start();
-            // Stream stderr
-            new Thread(() -> streamProcessOutputWithStyle(currentProcess.getErrorStream())).start();
-
-            appendPrompt();
-
-            new Thread(() -> {
-                try {
-                    int exitCode = currentProcess.waitFor();
-                    appendText("\nShell exited with code: " + exitCode + "\n");
-                    cleanupProcess();
-                } catch (InterruptedException e) {
-                    appendText("\nShell interrupted.\n");
-                    cleanupProcess();
-                }
-            }).start();
-
-        } catch (IOException e) {
-            appendText("[ERROR] Could not start interactive shell: " + e.getMessage() + "\n", "-fx-fill: red;");
-            cleanupProcess();
-        }
-    }
-
-    private static String getFileExtension(Path path) {
-        String name = path.getFileName().toString();
+    private String getFileExtension(Path filePath) {
+        String name = filePath.getFileName().toString();
         int lastDot = name.lastIndexOf('.');
         return lastDot == -1 ? "" : name.substring(lastDot + 1).toLowerCase();
+    }
+
+    private void startInteractiveShell() throws IOException {
+        String shellCommand = System.getProperty("os.name").toLowerCase().contains("win") ? "cmd.exe" : "/bin/bash";
+        runProcess(shellCommand);
+    }
+
+    private String detectStyleFromLine(String line) {
+        if (line.toLowerCase().contains("error")) {
+            return "-fx-fill: red; -fx-font-weight: bold;";
+        } else if (line.toLowerCase().contains("warning")) {
+            return "-fx-fill: orange;";
+        }
+        return null;
     }
 }
