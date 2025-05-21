@@ -9,6 +9,7 @@ import com.DevScribe.ui.components.EditorHandler;
 import com.DevScribe.ui.dialogs.Terminal;
 import com.DevScribe.utils.PathValidator;
 import com.DevScribe.utils.ScreenManager;
+import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -145,18 +146,25 @@ public class EditorScreen {
         editorTabPane = new TabPane();
         editorTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.ALL_TABS);
         editorTabPane.setTabMinWidth(100);
-        editorTabPane.setStyle("-fx-background-color: #1e1e24;");
+        editorTabPane.getStyleClass().add("editor-tab-pane");
 
-        terminal.setVisible(false);
-        terminal.setManaged(false);
         terminal.setPrefHeight(150);
 
-        VBox editorTerminalContainer = new VBox(editorTabPane, terminal);
-        VBox.setVgrow(editorTabPane, Priority.ALWAYS);
-        VBox.setVgrow(terminal, Priority.SOMETIMES);
+        SplitPane editorTerminalSplitPane = new SplitPane();
+        editorTerminalSplitPane.setOrientation(Orientation.VERTICAL);
 
-        root.setCenter(editorTerminalContainer);
+        editorTerminalSplitPane.getItems().addAll(editorTabPane, terminal);
+
+        editorTerminalSplitPane.setDividerPositions(0.75);
+
+        // Hide terminal initially, remove it from split pane so editor expands fully
+        terminal.setVisible(false);
+        terminal.setManaged(false);
+        editorTerminalSplitPane.getItems().remove(terminal);
+
+        root.setCenter(editorTerminalSplitPane);
     }
+
 
 
     private VBox createLeftNav() {
@@ -172,7 +180,7 @@ public class EditorScreen {
 
         VBox directory = new VBox();
         Label directoryLabel = new Label("Project");
-        directoryLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white; -fx-pref-width: 250px; -fx-background-color: #23232B");
+        directoryLabel.getStyleClass().add("directory-label");
 
         directory.getChildren().add(directoryLabel);
         directory.getChildren().add(projectTree);
@@ -237,9 +245,23 @@ public class EditorScreen {
 
         toggleTerminal.setOnAction(event -> {
             boolean visible = toggleTerminal.isSelected();
-            terminal.setVisible(visible);
-            terminal.setManaged(visible);
+
+            SplitPane splitPane = (SplitPane) root.getCenter();  // get your split pane reference
+
+            if (visible) {
+                if (!splitPane.getItems().contains(terminal)) {
+                    splitPane.getItems().add(terminal);
+                }
+                terminal.setVisible(true);
+                terminal.setManaged(true);
+                splitPane.setDividerPositions(0.75);
+            } else {
+                terminal.setVisible(false);
+                terminal.setManaged(false);
+                splitPane.getItems().remove(terminal);
+            }
         });
+
 
         toggleTheme.setOnAction(event -> {
             isDarkTheme = toggleTheme.isSelected();
@@ -259,6 +281,11 @@ public class EditorScreen {
                 Path filePath = findFileInProject(selectedTab.getText());
 
                 if (filePath != null) {
+                    SplitPane splitPane = (SplitPane) root.getCenter();
+                    if (!splitPane.getItems().contains(terminal)) {
+                        splitPane.getItems().add(terminal);
+                        splitPane.setDividerPositions(0.75);
+                    }
                     terminal.showTerminal(filePath, area.getText());
                     terminal.setVisible(true);
                     terminal.setManaged(true);
@@ -346,6 +373,7 @@ public class EditorScreen {
         CodeArea codeArea = new CodeArea(content);
         codeArea.setWrapText(true);
         codeArea.minHeight(550);
+        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
 
         Tab tab = new Tab(filePath.getFileName().toString());
         ScrollPane scrollPane = new ScrollPane(codeArea);
@@ -358,7 +386,6 @@ public class EditorScreen {
 
         final String originalContent = content;
 
-        // Add listener for changes in codeArea text
         codeArea.textProperty().addListener((obs, oldText, newText) -> {
             if (!newText.equals(originalContent)) {
                 // Mark tab as unsaved by adding "*" prefix if not already there
@@ -385,26 +412,27 @@ public class EditorScreen {
         if (filename.endsWith(".java")) return Language.JAVA;
         else if (filename.endsWith(".py")) return Language.PYTHON;
         else if (filename.endsWith(".c") || filename.endsWith(".h")) return Language.C;
-        else return Language.JAVA; // default fallback
+        else return Language.JAVA;
     }
 
     private void applySyntaxHighlighting(CodeArea codeArea, Language language) {
         LanguageHighlighter highlighter = highlighterMap.get(language);
         if (highlighter == null) return;
 
-        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
-        codeArea.richChanges()
-                .filter(ch -> !ch.getInserted().equals(ch.getRemoved())) // only when text changes
-                .successionEnds(Duration.ofMillis(500))
+        // Use a duration to debounce syntax highlighting updates
+        codeArea.multiPlainChanges()
+                .successionEnds(Duration.ofMillis(100))
                 .subscribe(ignore -> {
-                    int caretPosition = codeArea.getCaretPosition();
-                    codeArea.setStyleSpans(0, highlighter.computeHighlighting(codeArea.getText()));
-                    codeArea.moveTo(caretPosition);
+                    String text = codeArea.getText();
+                    var styledSpans = highlighter.computeHighlighting(text);
+                    codeArea.setStyleSpans(0, styledSpans);
                 });
 
-        // Initial highlighting
-        codeArea.setStyleSpans(0, highlighter.computeHighlighting(codeArea.getText()));
+        // Optional: apply initial highlighting
+        String initialText = codeArea.getText();
+        codeArea.setStyleSpans(0, highlighter.computeHighlighting(initialText));
     }
+
 
     private TreeItem<Path> createTreeItem(Path path) {
         TreeItem<Path> treeItem = new TreeItem<>(path);

@@ -2,6 +2,8 @@ package com.DevScribe.ui.screen;
 
 import com.DevScribe.model.ProjectItem;
 import com.DevScribe.ui.dialogs.NewProjectHandler;
+import com.DevScribe.ui.dialogs.ProgressDialog;
+import com.DevScribe.utils.GitUtil;
 import com.DevScribe.utils.PathValidator;
 import com.DevScribe.utils.ScreenManager;
 import javafx.collections.FXCollections;
@@ -300,10 +302,90 @@ public class LauncherScreen {
 
 
         Button cloneBtn = createToolbarButton("Clone Repository");
+        cloneBtn.setOnAction(e -> {
+            TextInputDialog urlDialog = new TextInputDialog();
+            urlDialog.setTitle("Clone Git Repository");
+            urlDialog.setHeaderText("Enter the Git Repository URL to clone:");
+            urlDialog.setContentText("Repository URL:");
+
+            urlDialog.showAndWait().ifPresent(url -> {
+                if (url.isEmpty()) {
+                    showError("Repository URL cannot be empty.");
+                    return;
+                }
+
+                DirectoryChooser dirChooser = new DirectoryChooser();
+                dirChooser.setTitle("Select Folder to Clone Repository Into");
+
+                File selectedDir = dirChooser.showDialog(stage);
+                if (selectedDir == null) {
+                    showError("No folder selected for cloning.");
+                    return;
+                }
+
+                String folderName = extractRepoNameFromUrl(url);
+                File cloneDir = new File(selectedDir, folderName);
+
+                ProgressDialog progressDialog = new ProgressDialog(stage, "Cloning Repository...");
+                progressDialog.show();
+
+                GitUtil.cloneRepository(url, cloneDir, new GitUtil.CloneProgressListener() {
+                    @Override
+                    public void onProgress(String task, int completed, int total) {
+                        double prog = total > 0 ? (double) completed / total : -1;
+                        javafx.application.Platform.runLater(() -> {
+                            progressDialog.setMessage(task);
+                            progressDialog.setProgress(prog);
+                        });
+                    }
+
+                    @Override
+                    public void onCompleted() {
+                        javafx.application.Platform.runLater(() -> {
+                            progressDialog.close();
+                            addProjectToList(folderName, cloneDir.getAbsolutePath());
+                            new EditorScreen().start(stage, cloneDir.toPath(), isDarkMode);
+                        });
+                    }
+
+                    @Override
+                    public void onFailed(Exception e) {
+                        javafx.application.Platform.runLater(() -> {
+                            progressDialog.close();
+                            showError("Failed to clone repository:\n" + e.getMessage());
+                        });
+                    }
+                });
+            });
+        });
+
 
         toolbar.getChildren().addAll(searchBox, new Separator(Orientation.VERTICAL), newProjectBtn, openBtn, cloneBtn);
         return toolbar;
     }
+
+    private String extractRepoNameFromUrl(String url) {
+        // Example: https://github.com/user/repo.git  -> "repo"
+        if (url == null || url.isEmpty()) {
+            return "repository";
+        }
+        // Remove trailing slash if present
+        if (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        // Extract after last '/'
+        int lastSlash = url.lastIndexOf('/');
+        if (lastSlash == -1 || lastSlash == url.length() - 1) {
+            return "repository";
+        }
+        String repoName = url.substring(lastSlash + 1);
+        // Remove .git suffix if present
+        if (repoName.endsWith(".git")) {
+            repoName = repoName.substring(0, repoName.length() - 4);
+        }
+        return repoName;
+    }
+
 
     private Button createToolbarButton(String text) {
         Button button = new Button(text);
