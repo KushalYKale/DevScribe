@@ -243,6 +243,27 @@ public class EditorScreen {
         MenuItem paste = new MenuItem("Paste");
         editMenu.getItems().addAll(undo, redo, new SeparatorMenuItem(), cut, copy, paste);
 
+        undo.setOnAction(e -> {
+            CodeArea area = getCurrentCodeArea();
+            if (area != null) area.undo();
+        });
+        redo.setOnAction(e -> {
+            CodeArea area = getCurrentCodeArea();
+            if (area != null) area.redo();
+        });
+        cut.setOnAction(e -> {
+            CodeArea area = getCurrentCodeArea();
+            if (area != null) area.cut();
+        });
+        copy.setOnAction(e -> {
+            CodeArea area = getCurrentCodeArea();
+            if (area != null) area.copy();
+        });
+        paste.setOnAction(e -> {
+            CodeArea area = getCurrentCodeArea();
+            if (area != null) area.paste();
+        });
+
         MenuButton viewMenu = new MenuButton("View");
         CheckMenuItem wordWrap = new CheckMenuItem("Word Wrap");
         CheckMenuItem toggleTerminal = new CheckMenuItem("Show Terminal");
@@ -444,6 +465,17 @@ public class EditorScreen {
 
         return codeArea;
     }
+
+    private CodeArea getCurrentCodeArea() {
+        if (editorTabPane == null) return null;
+        Tab tab = editorTabPane.getSelectionModel().getSelectedItem();
+        if (tab == null) return null;
+
+        // your tab holds a ScrollPane whose content is the CodeArea
+        ScrollPane scroll = (ScrollPane) tab.getContent();
+        return (CodeArea) scroll.getContent();
+    }
+
 
 
     private Language determineLanguageFromExtension(Path filePath) {
