@@ -8,6 +8,7 @@ import com.DevScribe.utils.PathValidator;
 import com.DevScribe.utils.ScreenManager;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.geometry.*;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -21,11 +22,9 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.List;
+import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.List;
 
 public class LauncherScreen {
     private double xOffset = 0;
@@ -35,14 +34,15 @@ public class LauncherScreen {
     private ToggleButton themeToggle;
     private ListView<ProjectItem> projectListView;
     private ObservableList<ProjectItem> projectList;
+    private FilteredList<ProjectItem> filteredList;
     private Stage stage;
-
 
     public void start(Stage primaryStage) {
         this.stage = primaryStage;
         primaryStage.initStyle(StageStyle.UNDECORATED);
 
         projectList = FXCollections.observableArrayList(loadProjectList());
+        filteredList = new FilteredList<>(projectList, p -> true);
 
         root = new BorderPane();
         root.getStyleClass().add("root");
@@ -56,18 +56,14 @@ public class LauncherScreen {
         updateTheme(scene);
 
         themeToggle = new ToggleButton("Switch to Light");
-        themeToggle.setOnAction(e -> {
-            toggleTheme();
-        });
-        themeToggle.getStyleClass().add("toolbar-button");
-
-
+        themeToggle.setOnAction(e -> toggleTheme());
+        themeToggle.getStyleClass().add("toolbar");
 
         HBox bottomBar = new HBox(themeToggle);
         bottomBar.setAlignment(Pos.CENTER_RIGHT);
         bottomBar.setPadding(new Insets(5, 15, 5, 15));
-
         root.setBottom(bottomBar);
+
         primaryStage.setScene(scene);
         primaryStage.show();
     }
@@ -82,8 +78,6 @@ public class LauncherScreen {
     private void updateTheme(Scene scene) {
         scene.getRoot().getStyleClass().removeAll("dark-theme", "light-theme");
         scene.getRoot().getStyleClass().add(isDarkMode ? "dark-theme" : "light-theme");
-
-        System.out.println(isDarkMode);
 
         projectListView.getStyleClass().removeAll("project-list-dark", "project-list-light");
         projectListView.getStyleClass().add(isDarkMode ? "project-list-dark" : "project-list-light");
@@ -159,8 +153,9 @@ public class LauncherScreen {
         BorderPane contentArea = new BorderPane();
         contentArea.setTop(createToolbar());
 
-        projectListView = new ListView<>(projectList);
+        projectListView = new ListView<>(filteredList);
         projectListView.getStyleClass().add(isDarkMode ? "project-list-dark" : "project-list-light");
+        projectListView.getStyleClass().add("project-list");
 
         projectListView.setCellFactory(listView -> {
             ListCell<ProjectItem> cell = new ListCell<>() {
@@ -173,24 +168,25 @@ public class LauncherScreen {
                     } else {
                         VBox infoBox = new VBox(5);
                         infoBox.setPadding(new Insets(8));
-
-                        if (isDarkMode) {
-                            infoBox.setStyle("-fx-background-color: #3a3a3a; -fx-background-radius: 10;");
-                        } else {
-                            infoBox.setStyle("-fx-background-color: #F5F5F5; -fx-background-radius: 10;");
-                        }
+                        infoBox.getStyleClass().add("project-list");
 
                         Label nameLabel = new Label(item.getName());
-                        nameLabel.setStyle("-fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold;");
+                        nameLabel.getStyleClass().add("project-list-label");
 
                         Label pathLabel = new Label(item.getPath().toString());
-                        pathLabel.setStyle("-fx-text-fill: #aaaaaa; -fx-font-size: 12px;");
+                        pathLabel.getStyleClass().add("project-path");
 
                         Button deleteBtn = new Button("❌");
                         deleteBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #ff6666; -fx-font-size: 14px;");
+                        deleteBtn.setOnAction(e -> {
+                            projectList.remove(item);
+                            saveProjectList(projectList);
+                        });
 
-                        HBox bottomRow = new HBox(pathLabel, deleteBtn);
-                        HBox.setHgrow(pathLabel, Priority.ALWAYS);
+                        Region spacer = new Region();
+                        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+                        HBox bottomRow = new HBox(pathLabel, spacer, deleteBtn);
                         bottomRow.setAlignment(Pos.CENTER_LEFT);
                         bottomRow.setSpacing(10);
 
@@ -198,6 +194,7 @@ public class LauncherScreen {
                         setGraphic(infoBox);
                     }
                 }
+
             };
 
             cell.setOnMouseClicked(event -> {
@@ -206,8 +203,6 @@ public class LauncherScreen {
                     ScreenManager.switchToEditor((Stage) listView.getScene().getWindow(), item.getPath());
                 }
             });
-            cell.setStyle("-fx-background-color: #23232B; ");
-
             return cell;
         });
 
@@ -221,14 +216,6 @@ public class LauncherScreen {
         contentArea.setCenter(scrollPane);
         return contentArea;
     }
-
-    private void refreshListView() {
-        if (projectListView != null) {
-            projectListView.refresh();
-        }
-    }
-
-
 
     private VBox createMainContent() {
         VBox content = new VBox(10);
@@ -245,6 +232,9 @@ public class LauncherScreen {
         TextField searchField = new TextField();
         searchField.setPromptText("Search projects...");
         searchField.getStyleClass().add("search-field");
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            filteredList.setPredicate(item -> item.getName().toLowerCase().contains(newVal.toLowerCase()));
+        });
 
         ImageView searchIcon = new ImageView(new Image(getClass().getResourceAsStream("/images/search.png")));
         searchIcon.setFitHeight(16);
@@ -258,12 +248,9 @@ public class LauncherScreen {
             NewProjectHandler.showNewProjectDialog(stage, new NewProjectHandler.ProjectCreationCallback() {
                 @Override
                 public void onProjectCreated(Path projectPath) {
-                    System.out.println("Project created at path: " + projectPath);  // Debugging line
                     addProjectToList(projectPath.getFileName().toString(), projectPath.toString());
-
-                    // Check if the path is valid before starting the editor
                     if (Files.exists(projectPath) && Files.isDirectory(projectPath)) {
-                        new EditorScreen().start(stage, projectPath,isDarkMode);
+                        new EditorScreen().start(stage, projectPath, isDarkMode);
                     } else {
                         showError("Invalid project path.");
                     }
@@ -271,7 +258,6 @@ public class LauncherScreen {
 
                 @Override
                 public void onError(String message) {
-                    System.out.println("Error: " + message);  // Debugging line
                     showError(message);
                 }
             });
@@ -281,25 +267,17 @@ public class LauncherScreen {
         openBtn.setOnAction(e -> {
             DirectoryChooser directoryChooser = new DirectoryChooser();
             directoryChooser.setTitle("Open Project Directory");
-
             File selectedDirectory = directoryChooser.showDialog(stage);
             if (selectedDirectory != null) {
                 Path projectPath = selectedDirectory.toPath().toAbsolutePath();
-                System.out.println("Selected directory: " + projectPath);
-
                 if (!PathValidator.validateProjectPath(projectPath)) {
-                    System.out.println("Validation failed for: " + projectPath);
                     showError("Selected folder is not a valid project.");
                     return;
                 }
-
                 addProjectToList(selectedDirectory.getName(), projectPath.toString());
-                System.out.println("Launching editor screen...");
-                new EditorScreen().start(stage, projectPath,isDarkMode);
+                new EditorScreen().start(stage, projectPath, isDarkMode);
             }
         });
-
-
 
         Button cloneBtn = createToolbarButton("Clone Repository");
         cloneBtn.setOnAction(e -> {
@@ -316,7 +294,6 @@ public class LauncherScreen {
 
                 DirectoryChooser dirChooser = new DirectoryChooser();
                 dirChooser.setTitle("Select Folder to Clone Repository Into");
-
                 File selectedDir = dirChooser.showDialog(stage);
                 if (selectedDir == null) {
                     showError("No folder selected for cloning.");
@@ -359,33 +336,17 @@ public class LauncherScreen {
             });
         });
 
-
         toolbar.getChildren().addAll(searchBox, new Separator(Orientation.VERTICAL), newProjectBtn, openBtn, cloneBtn);
         return toolbar;
     }
 
     private String extractRepoNameFromUrl(String url) {
-        // Example: https://github.com/user/repo.git  -> "repo"
-        if (url == null || url.isEmpty()) {
-            return "repository";
-        }
-        // Remove trailing slash if present
-        if (url.endsWith("/")) {
-            url = url.substring(0, url.length() - 1);
-        }
-        // Extract after last '/'
+        if (url == null || url.isEmpty()) return "repository";
+        if (url.endsWith("/")) url = url.substring(0, url.length() - 1);
         int lastSlash = url.lastIndexOf('/');
-        if (lastSlash == -1 || lastSlash == url.length() - 1) {
-            return "repository";
-        }
         String repoName = url.substring(lastSlash + 1);
-        // Remove .git suffix if present
-        if (repoName.endsWith(".git")) {
-            repoName = repoName.substring(0, repoName.length() - 4);
-        }
-        return repoName;
+        return repoName.endsWith(".git") ? repoName.substring(0, repoName.length() - 4) : repoName;
     }
-
 
     private Button createToolbarButton(String text) {
         Button button = new Button(text);

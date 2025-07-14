@@ -55,10 +55,13 @@ public class EditorScreen {
         terminal = new Terminal();
     }
 
-
     public void start(Stage stage, Path projectPath,boolean isDarkTheme){
         this.projectPath = projectPath;
         this.isDarkTheme = isDarkTheme;
+
+        System.out.println("Before initStyle");
+        stage.initStyle(StageStyle.UNDECORATED);
+        System.out.println("After initStyle");
 
         if (!PathValidator.validateProjectPath(projectPath)) {
             showErrorDialog("Invalid Project", "Project path is invalid or inaccessible.");
@@ -66,7 +69,6 @@ public class EditorScreen {
         }
 
         root = new BorderPane();
-        stage.initStyle(StageStyle.UNDECORATED);
 
         projectTree = new TreeView<>(createTreeItem(projectPath));
         projectTree.setShowRoot(true);
@@ -104,7 +106,9 @@ public class EditorScreen {
         scene.getStylesheets().add(getClass().getResource("/css/editor.css").toExternalForm());
         stage.setScene(scene);
         updateTheme(scene);
+        System.out.println("Before show");
         stage.show();
+        System.out.println("After show");
 
 
         scene.getAccelerators().put(
@@ -166,7 +170,6 @@ public class EditorScreen {
     }
 
 
-
     private VBox createLeftNav() {
         VBox leftNav = new VBox();
         leftNav.getStyleClass().add("left-nav");
@@ -174,7 +177,16 @@ public class EditorScreen {
         VBox projectToolbar = new VBox();
         projectToolbar.getStyleClass().add("project-toolbar");
 
-        Button toggleBtn = new Button("Folder");
+        ImageView folderIcon = new ImageView(new Image(getClass().getResourceAsStream("/images/folder.png")));
+        folderIcon.setFitWidth(16);
+        folderIcon.setFitHeight(16);
+
+        Button addFolderBtn = new Button();
+        addFolderBtn.setGraphic(folderIcon);
+        addFolderBtn.setTooltip(new Tooltip("Add New Folder"));
+
+        Button toggleBtn = new Button();
+        toggleBtn.setGraphic(addFolderBtn);
         toggleBtn.getStyleClass().add("folder-toggle-btn");
         projectToolbar.getChildren().add(toggleBtn);
 
@@ -183,7 +195,7 @@ public class EditorScreen {
         directoryLabel.getStyleClass().add("directory-label");
 
         directory.getChildren().add(directoryLabel);
-        directory.getChildren().add(projectTree);
+        directory.getChildren().addAll(projectTree);
 
         AtomicBoolean isVisible = new AtomicBoolean(true);
         toggleBtn.setOnAction(e -> {
@@ -191,10 +203,6 @@ public class EditorScreen {
             directory.setVisible(isVisible.get());
             directory.setManaged(isVisible.get());
 
-            FontIcon icon = (FontIcon) toggleBtn.getGraphic();
-            if (icon != null) {
-                icon.setIconCode(isVisible.get() ? MaterialDesignF.FOLDER : MaterialDesignF.FOLDER_OPEN);
-            }
         });
 
         HBox container = new HBox(projectToolbar, directory);
@@ -296,6 +304,9 @@ public class EditorScreen {
                 System.out.println("No file selected.");
             }
         });
+        Tooltip tooltip = new Tooltip("Click to run the code");
+        tooltip.setShowDelay(javafx.util.Duration.millis(100));
+        runButton.setTooltip(tooltip);
         runButton.getStyleClass().add("run-button");
 
         Button minimizeButton = createTitleBarButton("\uE921", () -> stage.setIconified(true));
@@ -356,13 +367,13 @@ public class EditorScreen {
 
         // If tab already open, select it
         for (Tab tab : editorTabPane.getTabs()) {
-            if (tab.getText().equals(filePath.getFileName().toString())) {
+            if (tab.getText().replace("*", "").equals(filePath.getFileName().toString())) {
                 editorTabPane.getSelectionModel().select(tab);
                 return null;
             }
         }
 
-        String content = "";
+        String content;
         try {
             content = Files.readString(filePath);
         } catch (IOException e) {
@@ -372,37 +383,65 @@ public class EditorScreen {
 
         CodeArea codeArea = new CodeArea(content);
         codeArea.setWrapText(true);
-        codeArea.minHeight(550);
         codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
 
-        Tab tab = new Tab(filePath.getFileName().toString());
         ScrollPane scrollPane = new ScrollPane(codeArea);
         scrollPane.setFitToHeight(true);
         scrollPane.setFitToWidth(true);
-        tab.setContent(scrollPane);
+
+        Tab tab = new Tab(filePath.getFileName().toString(), scrollPane);
+        editorTabPane.getTabs().add(tab);
+        editorTabPane.getSelectionModel().select(tab);
 
         Language language = determineLanguageFromExtension(filePath);
         applySyntaxHighlighting(codeArea, language);
 
-        final String originalContent = content;
-
+        // Handle unsaved file indication
         codeArea.textProperty().addListener((obs, oldText, newText) -> {
-            if (!newText.equals(originalContent)) {
-                // Mark tab as unsaved by adding "*" prefix if not already there
+            if (!newText.equals(content)) {
                 if (!tab.getText().startsWith("*")) {
-                    tab.setText("*" + filePath.getFileName().toString());
+                    tab.setText("*" + tab.getText());
                 }
             } else {
-                // Remove unsaved indicator if text matches original
                 if (tab.getText().startsWith("*")) {
-                    tab.setText(filePath.getFileName().toString());
+                    tab.setText(tab.getText().substring(1));
                 }
             }
         });
 
+        // Set tooltip to show full path
+        Tooltip tooltip = new Tooltip(filePath.toString());
+        tooltip.setShowDelay(javafx.util.Duration.millis(100));
+        Tooltip.install(tab.getGraphic(), tooltip);
+        tab.setTooltip(tooltip);
 
-        editorTabPane.getTabs().add(tab);
-        editorTabPane.getSelectionModel().select(tab);
+        // Close tab and cleanup
+        tab.setOnCloseRequest(event -> {
+            // Optionally prompt to save if unsaved
+            if (tab.getText().startsWith("*")) {
+                Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                alert.setTitle("Unsaved Changes");
+                alert.setHeaderText("You have unsaved changes in " + filePath.getFileName());
+                alert.setContentText("Do you want to save your changes before closing?");
+                ButtonType save = new ButtonType("Save");
+                ButtonType dontSave = new ButtonType("Don't Save");
+                ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+                alert.getButtonTypes().setAll(save, dontSave, cancel);
+
+                alert.showAndWait().ifPresent(response -> {
+                    if (response == save) {
+                        try {
+                            Files.writeString(filePath, codeArea.getText());
+                        } catch (IOException e) {
+                            showErrorDialog("Save Error", "Failed to save file.");
+                        }
+                    } else if (response == cancel) {
+                        event.consume();
+                    }
+                });
+            }
+        });
+
         return codeArea;
     }
 

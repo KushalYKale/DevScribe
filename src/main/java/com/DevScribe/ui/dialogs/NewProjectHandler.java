@@ -16,8 +16,8 @@ import java.util.Optional;
 public class NewProjectHandler {  // Renamed to follow Java class naming conventions
 
     public interface ProjectCreationCallback {
-        void onProjectCreated(Path projectPath); // This callback is invoked when the project is created successfully
-        void onError(String errorMessage);       // This callback is invoked when there is an error in project creation
+        void onProjectCreated(Path projectPath);
+        void onError(String errorMessage);
     }
 
     // The method that is used to show the New Project dialog

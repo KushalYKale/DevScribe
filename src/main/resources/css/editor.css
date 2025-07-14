@@ -361,15 +361,23 @@
     -fx-background-color: #23232B
 }
 
-.dark-theme .editor-tab-pane{
-    -fx-background-color: #1e1e24;
+.dark-theme .editor-tab-pane {
+    -fx-background-color: #1e1e1e; /* dark background for tab pane */
 }
 
-.dark-theme .editor-tab-pane .scroll-pane {
-    -fx-border-width: 0;
-    -fx-background-color: transparent;
+.dark-theme .editor-tab-pane .tab {
+    -fx-background-color: #3a3a3a; /* dark tab background */
+    -fx-text-base-color: white;    /* text color */
 }
 
+.dark-theme .editor-tab-pane .tab:selected {
+    -fx-background-color: #555555;
+    -fx-text-base-color: white;
+}
+
+.dark-theme .editor-tab-pane .tab:hover {
+    -fx-background-color: #444444;
+}
 
 /* LIGHT THEME */
 /* Header Styles */
@@ -724,6 +732,20 @@
     -fx-background-color: #ffffff;
 }
 
-.light-theme .editor-tab-pane{
-    -fx-background-color: #e0e0e0;
+.light-theme .editor-tab-pane {
+    -fx-background-color: #f0f0f0; /* light background for tab pane */
+}
+
+.light-theme .editor-tab-pane .tab {
+    -fx-background-color: #e0e0e0; /* light tab background */
+    -fx-text-base-color: black;    /* text color */
+}
+
+.light-theme .editor-tab-pane .tab:selected {
+    -fx-background-color: #c0c0c0;
+    -fx-text-base-color: black;
+}
+
+.light-theme .editor-tab-pane .tab:hover {
+    -fx-background-color: #d0d0d0;
 }

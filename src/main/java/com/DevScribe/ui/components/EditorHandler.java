@@ -20,6 +20,7 @@ public class EditorHandler {
     private final Map<Tab, Boolean> unsavedChangesMap = new HashMap<>();
     private Path projectDirectory;
     private TreeView<Path> projectTreeView;
+    CodeArea codeArea = new CodeArea();
 
     public EditorHandler(EditorScreen editorScreen, Path projectDirectory, TreeView<Path> projectTreeView) {
         this.editorScreen = editorScreen;
@@ -41,6 +42,7 @@ public class EditorHandler {
         editorScreen.getEditorTabPane().getTabs().add(newTab);
         editorScreen.getEditorTabPane().getSelectionModel().select(newTab);
         unsavedChangesMap.put(newTab, false);
+        tabFileMap.put(newTab, null);
     }
 
     public void handleOpenFile(Stage stage) {
@@ -73,32 +75,53 @@ public class EditorHandler {
     }
 
     public void handleSaveFile(Stage stage) {
-        Tab currentTab = editorScreen.getEditorTabPane().getSelectionModel().getSelectedItem();
-        if (currentTab != null) {
-            File file = tabFileMap.get(currentTab);
-            if (file != null) {
-                saveCurrentTabContent(file, currentTab);
-                refreshProjectTree(); // Refresh entire tree after saving
-            } else {
-                handleSaveAsFile(stage);
+        if (stage == null) {
+            stage = getStage();
+            if (stage == null) {
+                showError("Cannot save file: No application window found.");
+                return;
             }
+        }
+
+        Tab currentTab = editorScreen.getEditorTabPane().getSelectionModel().getSelectedItem();
+        if (currentTab == null) return;
+
+        File file = tabFileMap.get(currentTab);
+        System.out.println("handleSaveFile: currentTab=" + currentTab.getText() + ", file=" + file);
+
+        if (file != null) {
+            saveCurrentTabContent(file, currentTab);
+            refreshProjectTree();
+        } else {
+            handleSaveAsFile(stage);
         }
     }
 
+    // Save As dialog to save file content at chosen location
     public void handleSaveAsFile(Stage stage) {
-        Tab currentTab = editorScreen.getEditorTabPane().getSelectionModel().getSelectedItem();
-        if (currentTab != null) {
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Save As");
-            fileChooser.setInitialDirectory(projectDirectory.toFile());
-
-            File file = fileChooser.showSaveDialog(stage);
-            if (file != null) {
-                saveCurrentTabContent(file, currentTab);
-                tabFileMap.put(currentTab, file);
-                updateTabTitle(currentTab, file.getName());
-                refreshProjectTree();
+        if (stage == null) {
+            stage = getStage();
+            if (stage == null) {
+                showError("Cannot save file: No application window found.");
+                return;
             }
+        }
+
+        Tab currentTab = editorScreen.getEditorTabPane().getSelectionModel().getSelectedItem();
+        if (currentTab == null) return;
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save As");
+        if (projectDirectory != null && Files.exists(projectDirectory)) {
+            fileChooser.setInitialDirectory(projectDirectory.toFile());
+        }
+
+        File file = fileChooser.showSaveDialog(stage);
+        if (file != null) {
+            saveCurrentTabContent(file, currentTab);
+            tabFileMap.put(currentTab, file);
+            updateTabTitle(currentTab, file.getName());
+            refreshProjectTree();
         }
     }
 
@@ -294,6 +317,15 @@ public class EditorHandler {
             Path newPath = oldPath.resolveSibling(newName);
             try {
                 Files.move(oldPath, newPath);
+                // Update tabFileMap for open tabs with this file
+                for (Map.Entry<Tab, File> entry : tabFileMap.entrySet()) {
+                    if (entry.getValue() != null && entry.getValue().toPath().equals(oldPath)) {
+                        File newFile = newPath.toFile();
+                        entry.setValue(newFile);
+                        Tab tab = entry.getKey();
+                        updateTabTitle(tab, newFile.getName());
+                    }
+                }
                 refreshProjectTree();
             } catch (IOException e) {
                 showError("Failed to rename: " + e.getMessage());
@@ -343,11 +375,15 @@ public class EditorHandler {
                 } else if (change.wasAdded()) {
                     for (Tab tab : change.getAddedSubList()) {
                         tab.setOnCloseRequest(event -> {
-                            if (unsavedChangesMap.getOrDefault(tab, false)) {
+                            boolean hasUnsavedChanges = unsavedChangesMap.getOrDefault(tab, false);
+
+                            // If there are unsaved changes for either saved or new file, prompt user
+                            if (hasUnsavedChanges) {
                                 Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
                                 alert.setTitle("Unsaved Changes");
                                 alert.setHeaderText("You have unsaved changes.");
                                 alert.setContentText("Do you want to save before closing?");
+
                                 ButtonType save = new ButtonType("Save");
                                 ButtonType discard = new ButtonType("Discard");
                                 ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
@@ -356,10 +392,23 @@ public class EditorHandler {
                                 Optional<ButtonType> result = alert.showAndWait();
                                 if (result.isPresent()) {
                                     if (result.get() == save) {
-                                        handleSaveFile(null);
+                                        Stage stage = getStage();
+                                        if (stage == null) {
+                                            showError("Cannot save file: No application window found.");
+                                            event.consume();
+                                            return;
+                                        }
+                                        handleSaveFile(stage);
+
+                                        // After saving, still check if tab still has unsaved changes (in case save failed)
+                                        if (unsavedChangesMap.getOrDefault(tab, false)) {
+                                            event.consume(); // prevent closing if still unsaved
+                                        }
                                     } else if (result.get() == cancel) {
-                                        event.consume();
+                                        event.consume(); // cancel tab closing
                                     }
+                                } else {
+                                    event.consume(); // no choice made, cancel close
                                 }
                             }
                         });
@@ -368,6 +417,15 @@ public class EditorHandler {
             }
         });
     }
+
+    private Stage getStage() {
+        if (editorScreen != null && editorScreen.getEditorTabPane() != null &&
+                editorScreen.getEditorTabPane().getScene() != null) {
+            return (Stage) editorScreen.getEditorTabPane().getScene().getWindow();
+        }
+        return null;
+    }
+
 
     private void markTabAsSaved(Tab tab) {
         unsavedChangesMap.put(tab, false);

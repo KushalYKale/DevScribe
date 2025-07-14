@@ -73,7 +73,8 @@
 }
 
 .dark-theme .toolbar {
-    -fx-background-color: #2E2E38;
+    -fx-background-color: #23232B;
+    -fx-text-fill: #e0e0e0;
     -fx-border-color: #e0e0e0;
     -fx-border-width: 0 0 1 0;
 }
@@ -96,7 +97,7 @@
     -fx-font-size: 15px;
 }
 
-.dark-theme .toolbar-button {
+.dark-theme .toolbar-button{
     -fx-background-color: #2E2E38;
     -fx-text-fill: #e0e0e0;
     -fx-padding: 5px 10px;
@@ -108,16 +109,35 @@
     -fx-padding: 0 5px;
 }
 
-/* Dark theme list view */
+.scroll-content {
+    -fx-background-color: transparent;
+}
+
 .dark-theme .project-list {
     -fx-background-color: #2E2E38;
-    -fx-text-fill: white;
+    -fx-padding: 8px;
 }
 
 .dark-theme .project-list .list-cell {
-    -fx-background-color: #3a3a3a;
+    -fx-background-color: transparent;
     -fx-text-fill: white;
 }
+
+.dark-theme .project-list .list-cell:hover {
+    -fx-background-color: #333333;
+}
+
+.dark-theme .project-list-label {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+.dark-theme .project-path {
+    -fx-text-fill: #aaaaaa;
+    -fx-font-size: 12px;
+}
+
 
 /* Light Theme */
 .light-theme {
@@ -233,13 +253,27 @@
     -fx-padding: 0 5px;
 }
 
-/* Light theme list view */
 .light-theme .project-list {
-    -fx-background-color: #FFFFFF;
-    -fx-text-fill: #23232B;
+    -fx-background-color: #F5F5F5;
+    -fx-padding: 8px;
 }
 
 .light-theme .project-list .list-cell {
-    -fx-background-color: #F5F5F5;
-    -fx-text-fill: #23232B;
+    -fx-background-color: transparent;
+    -fx-text-fill: black;
+}
+
+.light-theme .project-list .list-cell:hover {
+    -fx-background-color: #EFEFEF;
+}
+
+.light-theme .project-list-label {
+    -fx-text-fill: black;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+.light-theme .project-path {
+    -fx-text-fill: #555555;
+    -fx-font-size: 12px;
 }
