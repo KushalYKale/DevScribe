@@ -38,6 +38,7 @@ public class EditorHandler {
         CodeArea codeArea = createCodeArea(newTab);
         ScrollPane scrollPane = createScrollPane(codeArea);
         newTab.setContent(scrollPane);
+        newTab.setUserData(null);
 
         editorScreen.getEditorTabPane().getTabs().add(newTab);
         editorScreen.getEditorTabPane().getSelectionModel().select(newTab);
@@ -53,13 +54,14 @@ public class EditorHandler {
         File selectedFile = fileChooser.showOpenDialog(stage);
         if (selectedFile != null) {
             try {
-                String content = new String(Files.readAllBytes(selectedFile.toPath()));
+                String content = Files.readString(selectedFile.toPath());
                 Tab newTab = new Tab(selectedFile.getName());
                 CodeArea codeArea = createCodeArea(newTab);
                 codeArea.replaceText(content);
 
                 ScrollPane scrollPane = createScrollPane(codeArea);
                 newTab.setContent(scrollPane);
+                newTab.setUserData(selectedFile.toPath());
 
                 editorScreen.getEditorTabPane().getTabs().add(newTab);
                 editorScreen.getEditorTabPane().getSelectionModel().select(newTab);
@@ -91,7 +93,6 @@ public class EditorHandler {
 
         if (file != null) {
             saveCurrentTabContent(file, currentTab);
-            refreshProjectTree();
         } else {
             handleSaveAsFile(stage);
         }
@@ -120,6 +121,7 @@ public class EditorHandler {
         if (file != null) {
             saveCurrentTabContent(file, currentTab);
             tabFileMap.put(currentTab, file);
+            currentTab.setUserData(file.toPath());
             updateTabTitle(currentTab, file.getName());
             refreshProjectTree();
         }
@@ -138,9 +140,22 @@ public class EditorHandler {
             Files.write(file.toPath(), content.getBytes());
             markTabAsSaved(tab);
             updateTabTitle(tab, file.getName());
+            tab.setUserData(file.toPath());
+            tabFileMap.put(tab, file);
         } catch (IOException e) {
             showError("Failed to save file: " + e.getMessage());
         }
+    }
+
+    public void registerTabFile(Tab tab, Path filePath) {
+        if (tab == null) {
+            return;
+        }
+        if (filePath == null) {
+            tabFileMap.remove(tab);
+            return;
+        }
+        tabFileMap.put(tab, filePath.toFile());
     }
 
     private CodeArea createCodeArea(Tab tab) {
@@ -185,23 +200,21 @@ public class EditorHandler {
     private TreeItem<Path> createTreeItem(Path path) {
         TreeItem<Path> item = new TreeItem<>(path);
         if (Files.isDirectory(path)) {
-            addFilesToTree(item, path);
+            item.getChildren().add(new TreeItem<>(null));
+            item.expandedProperty().addListener((obs, wasExpanded, isExpanded) -> {
+                if (isExpanded && item.getChildren().size() == 1 && item.getChildren().get(0).getValue() == null) {
+                    item.getChildren().clear();
+                    try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
+                        for (Path entry : stream) {
+                            item.getChildren().add(createTreeItem(entry));
+                        }
+                    } catch (IOException e) {
+                        showError("Error loading project files: " + e.getMessage());
+                    }
+                }
+            });
         }
         return item;
-    }
-
-    private void addFilesToTree(TreeItem<Path> parentItem, Path folderPath) {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(folderPath)) {
-            for (Path entry : stream) {
-                TreeItem<Path> item = new TreeItem<>(entry);
-                parentItem.getChildren().add(item);
-                if (Files.isDirectory(entry)) {
-                    addFilesToTree(item, entry);
-                }
-            }
-        } catch (IOException e) {
-            showError("Error loading project files: " + e.getMessage());
-        }
     }
 
     // ===================== Context Menu with New, Rename, Delete =====================
