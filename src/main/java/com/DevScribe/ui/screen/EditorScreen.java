@@ -11,6 +11,7 @@ import com.DevScribe.utils.PathValidator;
 import com.DevScribe.utils.ScreenManager;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
@@ -29,6 +30,9 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class EditorScreen {
@@ -49,6 +53,8 @@ public class EditorScreen {
             Language.C, new CHighlighter()
     );
 
+    private final ExecutorService highlightExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicLong highlightSequence = new AtomicLong();
     private Language currentLanguage = Language.JAVA;
 
     public EditorScreen() {
@@ -147,6 +153,9 @@ public class EditorScreen {
     }
 
     private void setupEditorArea() {
+        if (editorTabPane != null) {
+            return;
+        }
         editorTabPane = new TabPane();
         editorTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.ALL_TABS);
         editorTabPane.setTabMinWidth(100);
@@ -307,7 +316,7 @@ public class EditorScreen {
             if (selectedTab != null) {
                 ScrollPane scrollPane = (ScrollPane) selectedTab.getContent();
                 CodeArea area = (CodeArea) scrollPane.getContent();
-                Path filePath = findFileInProject(selectedTab.getText());
+                Path filePath = (Path) selectedTab.getUserData();
 
                 if (filePath != null) {
                     SplitPane splitPane = (SplitPane) root.getCenter();
@@ -319,7 +328,11 @@ public class EditorScreen {
                     terminal.setVisible(true);
                     terminal.setManaged(true);
                 } else {
-                    System.out.println("File path not found.");
+                    Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                    alert.setTitle("Run");
+                    alert.setHeaderText("Save your file before running");
+                    alert.setContentText("Please save the file to run it.");
+                    alert.showAndWait();
                 }
             } else {
                 System.out.println("No file selected.");
@@ -369,18 +382,6 @@ public class EditorScreen {
         return btn;
     }
 
-    private Path findFileInProject(String fileName) {
-        try {
-            return Files.walk(projectPath)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.getFileName().toString().equals(fileName))
-                    .findFirst()
-                    .orElse(null);
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
     private CodeArea openFileInEditor(Path filePath) {
         if (editorTabPane == null) {
             setupEditorArea();
@@ -411,6 +412,8 @@ public class EditorScreen {
         scrollPane.setFitToWidth(true);
 
         Tab tab = new Tab(filePath.getFileName().toString(), scrollPane);
+        tab.setUserData(filePath);
+        editorHandler.registerTabFile(tab, filePath);
         editorTabPane.getTabs().add(tab);
         editorTabPane.getSelectionModel().select(tab);
 
@@ -492,18 +495,25 @@ public class EditorScreen {
 
         // Use a duration to debounce syntax highlighting updates
         codeArea.multiPlainChanges()
-                .successionEnds(Duration.ofMillis(100))
-                .subscribe(ignore -> {
-                    String text = codeArea.getText();
-                    var styledSpans = highlighter.computeHighlighting(text);
-                    codeArea.setStyleSpans(0, styledSpans);
-                });
+                .successionEnds(Duration.ofMillis(150))
+                .subscribe(ignore -> scheduleHighlighting(codeArea, highlighter));
 
         // Optional: apply initial highlighting
-        String initialText = codeArea.getText();
-        codeArea.setStyleSpans(0, highlighter.computeHighlighting(initialText));
+        scheduleHighlighting(codeArea, highlighter);
     }
 
+    private void scheduleHighlighting(CodeArea codeArea, LanguageHighlighter highlighter) {
+        long sequence = highlightSequence.incrementAndGet();
+        String text = codeArea.getText();
+        highlightExecutor.submit(() -> {
+            var styledSpans = highlighter.computeHighlighting(text);
+            Platform.runLater(() -> {
+                if (sequence == highlightSequence.get()) {
+                    codeArea.setStyleSpans(0, styledSpans);
+                }
+            });
+        });
+    }
 
     private TreeItem<Path> createTreeItem(Path path) {
         TreeItem<Path> treeItem = new TreeItem<>(path);
